@@ -1,8 +1,7 @@
-from collections.abc import Generator
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from app.api.deps import get_db
 from app.db.session import SessionLocal
 from app.schemas.fish_type import (
     FishTypeCreate,
@@ -20,9 +19,6 @@ from app.services.fish_type import (
 
 router=APIRouter(prefix="/fish-types",tags=["Fish Types"])
 
-def get_db()-> Generator[Session, None, None]:
-    with SessionLocal() as db:
-        yield db
 
 @router.get("/",response_model=list[FishTypeRead])
 def get_fish_types(db:Session=Depends(get_db)):
@@ -42,7 +38,7 @@ def patch_fish_type(fish_type_id:int,data:FishTypeUpdate,db:Session=Depends(get_
     except FishTypeNotFoundError:
         raise HTTPException(status_code=404,detail="Fish type not found.")
     except DuplicateFishTypeNameError:
-        raise HTTPException(status_code=400,detail="A fish type with this name already exists.")
+        raise HTTPException(status_code=409,detail="A fish type with this name already exists.")
 
 
 @router.post("/{fish_type_id}/deactivate",response_model=FishTypeRead)

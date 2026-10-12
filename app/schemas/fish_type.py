@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints
 from typing import Annotated
 
 
