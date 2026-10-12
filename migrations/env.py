@@ -7,6 +7,7 @@ from alembic import context
 from app.db.session import Base
 from app.models.fish_type import FishType
 from app.models.customer import Customer
+from app.models.supplier import Supplier  # noqa: F401
 
 from app.core.config import settings
 
