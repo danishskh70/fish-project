@@ -10,7 +10,11 @@ from app.services.trip import (
     get_trip,
     list_trips,
 )
-
+from app.schemas.trip_requirements_table import TripRequirementsTableRead
+from app.services.trip_requirements_table import (
+    TripRequirementsTableNotFoundError,
+    get_trip_requirements_table,
+)
 router = APIRouter(prefix="/trips", tags=["Trips"])
 
 
@@ -82,4 +86,21 @@ def add_fish_type_to_trip_endpoint(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=message,
+        ) from exc
+
+
+@router.get(
+    "/{trip_id}/requirements-table",
+    response_model=TripRequirementsTableRead,
+)
+def get_trip_requirements_table_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> TripRequirementsTableRead:
+    try:
+        return get_trip_requirements_table(db, trip_id)
+    except TripRequirementsTableNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found.",
         ) from exc

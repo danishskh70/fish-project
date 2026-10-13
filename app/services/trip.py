@@ -7,6 +7,10 @@ from app.models.supplier import Supplier
 from app.models.trip import Trip
 from app.models.trip_fish_type import TripFishType
 from app.schemas.trip import TripCreate
+from app.services.trip_requirements_table import (
+    TripRequirementsTableNotFoundError,
+    get_trip_requirements_table,
+)
 
 
 def create_trip(db: Session, trip_data: TripCreate) -> Trip:
