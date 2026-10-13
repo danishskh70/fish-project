@@ -8,10 +8,17 @@ from app.api.trip_customers import router as trip_customers_router
 from app.api.trip_customer_requirements import (
     router as trip_customer_requirements_router,
 )
-
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 
 app=FastAPI()
-
+app.mount(
+    "/static",
+    StaticFiles(directory=FRONTEND_DIR),
+    name="static",
+)
 app.include_router(health_router,prefix="/api")
 app.include_router(fish_types_router, prefix="/api")
 app.include_router(customers_router, prefix="/api")
@@ -24,6 +31,9 @@ app.include_router(
 )
 
 
-@app.get("/")
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+
+
+@app.get("/", include_in_schema=False)
 def root():
-    return {"message": "Root endpoint"} 
+    return FileResponse(FRONTEND_DIR / "index.html")

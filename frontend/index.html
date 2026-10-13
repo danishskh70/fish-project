@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fish Distribution Manager</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app">
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>🐟 Fish Manager</h2>
+      </div>
+      <nav>
+        <ul>
+          <li><a href="#" data-view="trips" class="active">Trips</a></li>
+          <li><a href="#" data-view="customers">Customers</a></li>
+          <li><a href="#" data-view="fish-types">Fish Types</a></li>
+          <li><a href="#" data-view="suppliers">Suppliers</a></li>
+        </ul>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="health-button" class="btn btn-secondary btn-sm">Check Backend</button>
+        <span id="health-result" class="health-status">Waiting...</span>
+      </div>
+    </aside>
+
+    <!-- ========== MAIN ========== -->
+    <main class="main-content">
+
+      <!-- TRIPS -->
+      <section id="view-trips" class="view active">
+        <div class="view-header">
+          <h1>Trips</h1>
+          <button id="create-trip-btn" class="btn btn-primary">+ New Trip</button>
+        </div>
+
+        <div id="trips-list-container" class="card">
+          <div id="trips-loading" class="loading">Loading trips…</div>
+          <div id="trips-empty" class="empty-state hidden">No trips yet. Create your first trip.</div>
+          <ul id="trips-list" class="trip-list"></ul>
+        </div>
+
+        <!-- Trip workspace -->
+        <div id="trip-workspace" class="hidden">
+          <div class="trip-header card">
+            <div class="trip-info">
+              <h2 id="trip-title">Trip details</h2>
+              <p id="trip-meta" class="muted"></p>
+            </div>
+            <div class="trip-actions">
+              <button id="add-customer-to-trip-btn" class="btn btn-secondary">+ Add Customer</button>
+              <button id="add-fish-to-trip-btn" class="btn btn-secondary">+ Add Fish Type</button>
+              <button id="back-to-trips-btn" class="btn btn-outline">← All Trips</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Trip requirements</h3>
+            <p class="muted" id="requirements-subtitle">
+              Quantities measured in bags
+            </p>
+
+            <div id="requirements-loading" class="loading hidden">Loading requirements…</div>
+            <div id="requirements-error" class="error hidden"></div>
+
+            <!-- Empty: no customers -->
+            <div id="requirements-empty" class="empty-state hidden">
+              <p>No customers assigned to this trip.</p>
+              <button id="empty-add-customer-btn" class="btn btn-primary btn-sm" style="margin-top:12px;">
+                + Add an existing customer
+              </button>
+            </div>
+
+            <!-- Empty: no fish types -->
+            <div id="requirements-no-fish" class="empty-state hidden">
+              <p>This trip has no configured fish types.</p>
+              <button id="empty-add-fish-btn" class="btn btn-primary btn-sm" style="margin-top:12px;">
+                + Add a fish type
+              </button>
+            </div>
+
+            <div class="table-wrapper">
+              <table id="requirements-table">
+                <thead id="requirements-thead"></thead>
+                <tbody id="requirements-tbody"></tbody>
+                <tfoot id="requirements-tfoot"></tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CUSTOMERS -->
+      <section id="view-customers" class="view">
+        <div class="view-header">
+          <h1>Customers</h1>
+          <button id="create-customer-btn" class="btn btn-primary">+ New Customer</button>
+        </div>
+        <div class="card">
+          <input type="text" id="customer-search" placeholder="Search by name or mobile…" class="search-input">
+          <div id="customers-loading" class="loading">Loading customers…</div>
+          <div id="customers-empty" class="empty-state hidden">No customers found.</div>
+          <ul id="customers-list" class="customer-list"></ul>
+        </div>
+      </section>
+
+      <!-- FISH TYPES -->
+      <section id="view-fish-types" class="view">
+        <div class="view-header">
+          <h1>Fish Types</h1>
+          <button id="create-fish-type-btn" class="btn btn-primary">+ New Fish Type</button>
+        </div>
+        <div class="card">
+          <div id="fish-types-loading" class="loading">Loading fish types…</div>
+          <div id="fish-types-empty" class="empty-state hidden">No fish types defined.</div>
+          <ul id="fish-types-list" class="fish-type-list"></ul>
+        </div>
+      </section>
+
+      <!-- SUPPLIERS -->
+      <section id="view-suppliers" class="view">
+        <div class="view-header">
+          <h1>Suppliers</h1>
+          <button id="create-supplier-btn" class="btn btn-primary">+ New Supplier</button>
+        </div>
+        <div class="card">
+          <div id="suppliers-loading" class="loading">Loading suppliers…</div>
+          <div id="suppliers-empty" class="empty-state hidden">No suppliers defined.</div>
+          <ul id="suppliers-list" class="supplier-list"></ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title"></h3>
+        <button id="modal-close" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+      <div id="modal-footer" class="modal-footer"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
