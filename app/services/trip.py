@@ -89,3 +89,47 @@ def list_trips(db: Session) -> list[Trip]:
 
 def get_trip(db: Session, trip_id: int) -> Trip | None:
     return db.get(Trip, trip_id)
+
+def add_fish_type_to_trip(
+    db: Session,
+    trip_id: int,
+    fish_type_id: int,
+) -> TripFishType:
+    trip = db.get(Trip, trip_id)
+
+    if trip is None:
+        raise ValueError("Trip not found.")
+
+    fish_type = db.get(FishType, fish_type_id)
+
+    if fish_type is None:
+        raise ValueError("Fish type not found.")
+
+    if not fish_type.is_active:
+        raise ValueError("Cannot add an inactive fish type to a trip.")
+
+    existing_association = db.scalar(
+        select(TripFishType).where(
+            TripFishType.trip_id == trip_id,
+            TripFishType.fish_type_id == fish_type_id,
+        )
+    )
+
+    if existing_association is not None:
+        raise ValueError("Fish type is already configured for this trip.")
+
+    association = TripFishType(
+        trip_id=trip_id,
+        fish_type_id=fish_type_id,
+    )
+
+    db.add(association)
+
+    try:
+        db.commit()
+        db.refresh(association)
+    except Exception:
+        db.rollback()
+        raise
+
+    return association

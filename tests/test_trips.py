@@ -25,10 +25,15 @@ def create_supplier(client: TestClient, *, active: bool = True) -> int:
 
     return supplier_id
 
-def create_fish_type(client: TestClient, *, active: bool = True) -> int:
+def create_fish_type(
+    client: TestClient,
+    *,
+    active: bool = True,
+    name: str = "Test Rohu",
+) -> int:
     response = client.post(
         "/api/fish-types/",
-        json={"name": "Test Rohu"},
+        json={"name": name},
     )
     assert response.status_code == 201, response.text
 
@@ -295,3 +300,136 @@ def test_create_trip_saves_selected_fish_types(
         first_fish_type_id,
         second_fish_type_id,
     }
+
+def test_add_fish_type_to_trip(client: TestClient) -> None:
+    supplier_id = create_supplier(client)
+    initial_fish_type_id = create_fish_type(client)
+
+    trip_response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [initial_fish_type_id],
+        },
+    )
+    assert trip_response.status_code == 201, trip_response.text
+    trip_id = trip_response.json()["id"]
+
+    new_fish_type_response = client.post(
+        "/api/fish-types/",
+        json={"name": "Test Catla"},
+    )
+    assert new_fish_type_response.status_code == 201
+    new_fish_type_id = new_fish_type_response.json()["id"]
+
+    response = client.post(
+        f"/api/trips/{trip_id}/fish-types",
+        json={"fish_type_id": new_fish_type_id},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["trip_id"] == trip_id
+    assert response.json()["fish_type_id"] == new_fish_type_id
+
+
+def test_add_fish_type_to_nonexistent_trip(
+    client: TestClient,
+) -> None:
+    fish_type_id = create_fish_type(client)
+
+    response = client.post(
+        "/api/trips/999999/fish-types",
+        json={"fish_type_id": fish_type_id},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Trip not found."
+
+
+def test_add_nonexistent_fish_type_to_trip(
+    client: TestClient,
+) -> None:
+    supplier_id = create_supplier(client)
+    initial_fish_type_id = create_fish_type(client)
+
+    trip_response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [initial_fish_type_id],
+        },
+    )
+    assert trip_response.status_code == 201, trip_response.text
+    trip_id = trip_response.json()["id"]
+
+    response = client.post(
+        f"/api/trips/{trip_id}/fish-types",
+        json={"fish_type_id": 999999},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Fish type not found."
+
+
+def test_add_inactive_fish_type_to_trip(
+    client: TestClient,
+) -> None:
+    supplier_id = create_supplier(client)
+    initial_fish_type_id = create_fish_type(client)
+
+    trip_response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [initial_fish_type_id],
+        },
+    )
+    assert trip_response.status_code == 201, trip_response.text
+    trip_id = trip_response.json()["id"]
+
+    inactive_fish_type_id = create_fish_type(
+        client,
+        active=False,
+        name="Test Inactive Rohu",
+    )
+
+    response = client.post(
+        f"/api/trips/{trip_id}/fish-types",
+        json={"fish_type_id": inactive_fish_type_id},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Cannot add an inactive fish type to a trip."
+    )
+
+
+def test_add_duplicate_fish_type_to_trip(
+    client: TestClient,
+) -> None:
+    supplier_id = create_supplier(client)
+    fish_type_id = create_fish_type(client)
+
+    trip_response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id],
+        },
+    )
+    assert trip_response.status_code == 201, trip_response.text
+    trip_id = trip_response.json()["id"]
+
+    response = client.post(
+        f"/api/trips/{trip_id}/fish-types",
+        json={"fish_type_id": fish_type_id},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Fish type is already configured for this trip."
+    )
