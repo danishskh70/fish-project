@@ -66,3 +66,19 @@ def deactivate_customer(
     db.refresh(customer)
 
     return customer
+
+def activate_customer(
+    db: Session,
+    customer_id: int,
+) -> Customer:
+    customer = db.get(Customer, customer_id)
+
+    if customer is None:
+        raise CustomerNotFoundError
+
+    customer.is_active = True
+
+    db.commit()
+    db.refresh(customer)
+
+    return customer

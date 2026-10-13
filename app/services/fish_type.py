@@ -97,3 +97,16 @@ def deactivate_fish_type(
     db.refresh(fish_type)
 
     return fish_type
+
+def activate_fish_type(db: Session, fish_type_id: int) -> FishType:
+    fish_type = db.get(FishType, fish_type_id)
+
+    if fish_type is None:
+        raise FishTypeNotFoundError
+
+    fish_type.is_active = True
+
+    db.commit()
+    db.refresh(fish_type)
+
+    return fish_type

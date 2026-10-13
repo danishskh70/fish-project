@@ -133,3 +133,56 @@ def test_deactivate_customer(client):
     assert listed.status_code == 200
     assert len(listed.json()) == 1
     assert listed.json()[0]["is_active"] is False
+
+
+def test_activate_deactivated_customer(client):
+    create_response = client.post(
+        "/api/customers/",
+        json={
+            "name": "Danish",
+            "phone": "9890456123",
+            "address": "Ghargoan",
+        },
+    )
+    assert create_response.status_code == 201
+    customer_id = create_response.json()["id"]
+
+    deactivate_response = client.post(
+        f"/api/customers/{customer_id}/deactivate"
+    )
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.json()["is_active"] is False
+
+    response = client.post(
+        f"/api/customers/{customer_id}/activate"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == customer_id
+    assert response.json()["is_active"] is True
+
+
+def test_activate_already_active_customer(client):
+    create_response = client.post(
+        "/api/customers/",
+        json={
+            "name": "Test Customer",
+            "phone": "9890456124",
+            "address": "Pune",
+        },
+    )
+    assert create_response.status_code == 201
+    customer_id = create_response.json()["id"]
+
+    response = client.post(
+        f"/api/customers/{customer_id}/activate"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is True
+
+
+def test_activate_nonexistent_customer_returns_404(client):
+    response = client.post("/api/customers/999999/activate")
+
+    assert response.status_code == 404

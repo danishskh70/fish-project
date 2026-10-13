@@ -15,6 +15,7 @@ from app.services.fish_type import (
     deactivate_fish_type,
     list_fish_types,
     update_fish_type,
+    activate_fish_type,
 )
 
 router=APIRouter(prefix="/fish-types",tags=["Fish Types"])
@@ -47,3 +48,16 @@ def post_deactivate_fish_type(fish_type_id:int,db:Session=Depends(get_db)):
         return deactivate_fish_type(db,fish_type_id)
     except FishTypeNotFoundError:
         raise HTTPException(status_code=404,detail="Fish type not found.")
+
+@router.post("/{fish_type_id}/activate", response_model=FishTypeRead)
+def post_activate_fish_type(
+    fish_type_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return activate_fish_type(db, fish_type_id)
+    except FishTypeNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="Fish type not found.",
+        )

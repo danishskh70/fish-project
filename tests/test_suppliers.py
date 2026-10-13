@@ -132,3 +132,56 @@ def test_deactivate_supplier_preserves_record(client):
     assert listed.status_code == 200
     assert len(listed.json()) == 1
     assert listed.json()[0]["is_active"] is False
+
+
+def test_activate_deactivated_supplier(client):
+    create_response = client.post(
+        "/api/suppliers/",
+        json={
+            "name": "Supplier A",
+            "phone": "9876543210",
+            "address": "Pune",
+        },
+    )
+    assert create_response.status_code == 201
+    supplier_id = create_response.json()["id"]
+
+    deactivate_response = client.post(
+        f"/api/suppliers/{supplier_id}/deactivate"
+    )
+    assert deactivate_response.status_code == 200
+    assert deactivate_response.json()["is_active"] is False
+
+    response = client.post(
+        f"/api/suppliers/{supplier_id}/activate"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == supplier_id
+    assert response.json()["is_active"] is True
+
+
+def test_activate_already_active_supplier(client):
+    create_response = client.post(
+        "/api/suppliers/",
+        json={
+            "name": "Supplier B",
+            "phone": "9876543211",
+            "address": "Mumbai",
+        },
+    )
+    assert create_response.status_code == 201
+    supplier_id = create_response.json()["id"]
+
+    response = client.post(
+        f"/api/suppliers/{supplier_id}/activate"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is True
+
+
+def test_activate_nonexistent_supplier_returns_404(client):
+    response = client.post("/api/suppliers/999999/activate")
+
+    assert response.status_code == 404

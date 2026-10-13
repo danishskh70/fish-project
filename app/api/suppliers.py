@@ -14,6 +14,7 @@ from app.services.supplier import (
     deactivate_supplier,
     list_suppliers,
     update_supplier,
+    activate_supplier,
 )
 
 
@@ -72,3 +73,16 @@ def post_deactivate_supplier(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Supplier not found.",
         ) from None
+
+@router.post("/{supplier_id}/activate", response_model=SupplierRead)
+def post_activate_supplier(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return activate_supplier(db, supplier_id)
+    except SupplierNotFoundError:
+        raise HTTPException(
+            status_code=404,
+            detail="Supplier not found.",
+        )

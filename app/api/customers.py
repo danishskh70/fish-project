@@ -12,6 +12,7 @@ from app.services.customer import (
     deactivate_customer,
     list_customers,
     update_customer,
+    activate_customer,
 )
 
 
@@ -60,5 +61,18 @@ def post_deactivate_customer(
     except CustomerNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found.",
+        )
+
+@router.post("/{customer_id}/activate", response_model=CustomerRead)
+def post_activate_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return activate_customer(db, customer_id)
+    except CustomerNotFoundError:
+        raise HTTPException(
+            status_code=404,
             detail="Customer not found.",
         )

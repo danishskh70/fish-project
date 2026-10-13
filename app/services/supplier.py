@@ -73,3 +73,19 @@ def deactivate_supplier(
     db.refresh(supplier)
 
     return supplier
+
+def activate_supplier(
+    db: Session,
+    supplier_id: int,
+) -> Supplier:
+    supplier = db.get(Supplier, supplier_id)
+
+    if supplier is None:
+        raise SupplierNotFoundError
+
+    supplier.is_active = True
+
+    db.commit()
+    db.refresh(supplier)
+
+    return supplier
