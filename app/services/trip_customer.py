@@ -23,6 +23,9 @@ class InactiveCustomerError(Exception):
 class DuplicateTripCustomerError(Exception):
     pass
 
+class SameTripCopyError(Exception):
+    pass
+
 
 def add_customer_to_trip(
     db: Session,
@@ -97,3 +100,60 @@ def list_trip_customers(
     )
 
     return list(db.scalars(statement).all())
+
+
+def copy_customers_from_trip(
+    db: Session,
+    destination_trip_id: int,
+    source_trip_id: int,
+) -> list[TripCustomer]:
+    destination_trip = db.get(Trip, destination_trip_id)
+    if destination_trip is None:
+        raise TripNotFoundError
+
+    source_trip = db.get(Trip, source_trip_id)
+    if source_trip is None:
+        raise TripNotFoundError
+
+    if destination_trip_id == source_trip_id:
+        raise SameTripCopyError
+
+    source_assignments = list(
+        db.scalars(
+            select(TripCustomer)
+            .join(Customer, Customer.id == TripCustomer.customer_id)
+            .where(
+                TripCustomer.trip_id == source_trip_id,
+                Customer.is_active.is_(True),
+            )
+            .order_by(TripCustomer.id)
+        ).all()
+    )
+
+    destination_customer_ids = set(
+        db.scalars(
+            select(TripCustomer.customer_id).where(
+                TripCustomer.trip_id == destination_trip_id
+            )
+        ).all()
+    )
+
+    for source_assignment in source_assignments:
+        if source_assignment.customer_id in destination_customer_ids:
+            continue
+
+        db.add(
+            TripCustomer(
+                trip_id=destination_trip_id,
+                customer_id=source_assignment.customer_id,
+            )
+        )
+        destination_customer_ids.add(source_assignment.customer_id)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return list_trip_customers(db, destination_trip_id)

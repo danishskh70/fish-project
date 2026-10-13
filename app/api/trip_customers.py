@@ -9,10 +9,12 @@ from app.schemas.trip_customer import (
 from app.services.trip_customer import (
     CustomerNotFoundError,
     DuplicateTripCustomerError,
+    SameTripCopyError,
     InactiveCustomerError,
     TripNotFoundError,
     add_customer_to_trip,
     list_trip_customers,
+    copy_customers_from_trip,
 )
 
 
@@ -67,4 +69,31 @@ def get_trip_customers(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trip not found.",
+        )
+
+
+@router.post(
+    "/{destination_trip_id}/customers/copy-from/{source_trip_id}",
+    response_model=list[TripCustomerRead],
+)
+def post_copy_trip_customers(
+    destination_trip_id: int,
+    source_trip_id: int,
+    db: Session = Depends(get_db),
+) -> list[TripCustomerRead]:
+    try:
+        return copy_customers_from_trip(
+            db,
+            destination_trip_id,
+            source_trip_id,
+        )
+    except TripNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Trip not found.",
+        )
+    except SameTripCopyError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Source and destination trips must be different.",
         )

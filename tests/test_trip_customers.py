@@ -180,3 +180,144 @@ def test_assign_customer_with_invalid_id(
     )
 
     assert response.status_code == 422
+
+def test_copy_customers_skips_existing_assignments(
+    client: TestClient,
+) -> None:
+    source_trip_id = create_trip(client)
+    destination_trip_id = create_trip(client)
+
+    first_customer_id = create_customer(client)
+    second_customer_id = create_customer(client)
+    third_customer_id = create_customer(client)
+
+    # Source trip has all three customers.
+    for customer_id in (
+        first_customer_id,
+        second_customer_id,
+        third_customer_id,
+    ):
+        response = client.post(
+            f"/api/trips/{source_trip_id}/customers",
+            json={"customer_id": customer_id},
+        )
+        assert response.status_code == 201, response.text
+
+    # Destination already has the first customer.
+    response = client.post(
+        f"/api/trips/{destination_trip_id}/customers",
+        json={"customer_id": first_customer_id},
+    )
+    assert response.status_code == 201, response.text
+
+    response = client.post(
+        f"/api/trips/{destination_trip_id}/customers/"
+        f"copy-from/{source_trip_id}"
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert [item["customer_id"] for item in data] == [
+        first_customer_id,
+        second_customer_id,
+        third_customer_id,
+    ]
+
+    # Repeating the operation must not create duplicates.
+    response = client.post(
+        f"/api/trips/{destination_trip_id}/customers/"
+        f"copy-from/{source_trip_id}"
+    )
+
+    assert response.status_code == 200, response.text
+    assert len(response.json()) == 3
+
+
+def test_copy_customers_skips_inactive_customers(
+    client: TestClient,
+) -> None:
+    source_trip_id = create_trip(client)
+    destination_trip_id = create_trip(client)
+
+
+    active_customer_id = create_customer(client)
+    inactive_customer_id = create_customer(client)
+
+    for customer_id in (active_customer_id, inactive_customer_id):
+        response = client.post(
+            f"/api/trips/{source_trip_id}/customers",
+            json={"customer_id": customer_id},
+        )
+        assert response.status_code == 201, response.text
+
+    response = client.post(
+        f"/api/customers/{inactive_customer_id}/deactivate"
+    )
+    assert response.status_code in (200, 204), response.text
+
+
+def test_copy_customers_rejects_same_trip(
+    client: TestClient,
+) -> None:
+    trip_id = create_trip(client)
+
+    response = client.post(
+        f"/api/trips/{trip_id}/customers/copy-from/{trip_id}"
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Source and destination trips must be different."
+    )
+
+
+def test_copy_customers_rejects_missing_trip(
+    client: TestClient,
+) -> None:
+    existing_trip_id = create_trip(client)
+
+    response = client.post(
+        f"/api/trips/{existing_trip_id}/customers/copy-from/999999"
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Trip not found."
+
+
+def test_copy_customers_does_not_copy_quantities(
+    client: TestClient,
+) -> None:
+    source_trip_id = create_trip(client)
+    destination_trip_id = create_trip(client)
+    customer_id = create_customer(client)
+
+    response = client.post(
+        f"/api/trips/{source_trip_id}/customers",
+        json={"customer_id": customer_id},
+    )
+    assert response.status_code == 201, response.text
+
+    fish_type_response = client.post(
+        "/api/fish-types/",
+        json={"name": "Rohu"},
+    )
+    assert fish_type_response.status_code == 201, fish_type_response.text
+    fish_type_id = fish_type_response.json()["id"]
+
+    response = client.post(
+        f"/api/trips/{source_trip_id}/customers/{customer_id}/requirements",
+        json={"fish_type_id": fish_type_id, "quantity_bags": 100},
+    )
+    assert response.status_code == 201, response.text
+
+    response = client.post(
+        f"/api/trips/{destination_trip_id}/customers/"
+        f"copy-from/{source_trip_id}"
+    )
+    assert response.status_code == 200, response.text
+
+    response = client.get(
+        f"/api/trips/{destination_trip_id}/customers/{customer_id}/requirements"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == []
