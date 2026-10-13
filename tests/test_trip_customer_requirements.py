@@ -30,12 +30,14 @@ def create_customer(client: TestClient) -> int:
 
 def create_trip(client: TestClient) -> int:
     supplier_id = create_supplier(client)
+    fish_type_id = create_fish_type(client, "Trip Setup Fish")
 
     response = client.post(
         "/api/trips/",
         json={
             "trip_date": "2026-10-14",
             "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id],
         },
     )
     assert response.status_code == 201

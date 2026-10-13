@@ -1,8 +1,11 @@
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.fish_type import FishType
 from app.models.supplier import Supplier
 from app.models.trip import Trip
+from app.models.trip_fish_type import TripFishType
 from app.schemas.trip import TripCreate
 
 
@@ -19,6 +22,32 @@ def create_trip(db: Session, trip_data: TripCreate) -> Trip:
     if not supplier.is_active:
         raise ValueError("Cannot create a trip with an inactive supplier.")
 
+    fish_types = list(
+        db.scalars(
+            select(FishType).where(
+                FishType.id.in_(trip_data.fish_type_ids)
+            )
+        ).all()
+    )
+
+    fish_types_by_id = {
+        fish_type.id: fish_type
+        for fish_type in fish_types
+    }
+
+    for fish_type_id in trip_data.fish_type_ids:
+        fish_type = fish_types_by_id.get(fish_type_id)
+
+        if fish_type is None:
+            raise ValueError(
+                f"Fish type {fish_type_id} not found."
+            )
+
+        if not fish_type.is_active:
+            raise ValueError(
+                f"Cannot add inactive fish type {fish_type_id} to a trip."
+            )
+
     trip = Trip(
         trip_date=trip_data.trip_date,
         supplier_id=trip_data.supplier_id,
@@ -26,8 +55,26 @@ def create_trip(db: Session, trip_data: TripCreate) -> Trip:
     )
 
     db.add(trip)
-    db.commit()
-    db.refresh(trip)
+
+    try:
+        db.flush()
+
+        db.add_all(
+            [
+                TripFishType(
+                    trip_id=trip.id,
+                    fish_type_id=fish_type_id,
+                )
+                for fish_type_id in trip_data.fish_type_ids
+            ]
+        )
+
+        db.commit()
+        db.refresh(trip)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return trip
 

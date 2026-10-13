@@ -11,7 +11,7 @@ from app.models.supplier import Supplier  # noqa: F401
 from app.models.trip import Trip
 from app.models.trip_customer import TripCustomer  # noqa: F401
 from app.models.trip_customer_requirement import TripCustomerRequirement
-
+from app.models.trip_fish_type import TripFishType  # noqa: F401
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides

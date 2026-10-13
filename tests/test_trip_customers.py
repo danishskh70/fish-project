@@ -13,6 +13,21 @@ def create_supplier(client: TestClient) -> int:
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
+def create_fish_type(client: TestClient) -> int:
+    response = client.get("/api/fish-types/")
+    assert response.status_code == 200, response.text
+
+    fish_types = response.json()
+
+    if fish_types:
+        return fish_types[0]["id"]
+
+    response = client.post(
+        "/api/fish-types/",
+        json={"name": "Test Rohu"},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
 
 def create_customer(client: TestClient, *, active: bool = True) -> int:
     response = client.post(
@@ -38,12 +53,14 @@ def create_customer(client: TestClient, *, active: bool = True) -> int:
 
 def create_trip(client: TestClient) -> int:
     supplier_id = create_supplier(client)
+    fish_type_id = create_fish_type(client)
 
     response = client.post(
         "/api/trips/",
         json={
             "trip_date": "2026-10-13",
             "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id],
         },
     )
     assert response.status_code == 201, response.text

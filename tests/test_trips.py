@@ -1,4 +1,7 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from app.models.trip_fish_type import TripFishType
 
 
 def create_supplier(client: TestClient, *, active: bool = True) -> int:
@@ -22,15 +25,33 @@ def create_supplier(client: TestClient, *, active: bool = True) -> int:
 
     return supplier_id
 
+def create_fish_type(client: TestClient, *, active: bool = True) -> int:
+    response = client.post(
+        "/api/fish-types/",
+        json={"name": "Test Rohu"},
+    )
+    assert response.status_code == 201, response.text
+
+    fish_type_id = response.json()["id"]
+
+    if not active:
+        response = client.post(
+            f"/api/fish-types/{fish_type_id}/deactivate"
+        )
+        assert response.status_code == 200, response.text
+
+    return fish_type_id
 
 def test_create_trip(client: TestClient) -> None:
     supplier_id = create_supplier(client)
+    fish_type_id = create_fish_type(client)
 
     response = client.post(
         "/api/trips/",
         json={
             "trip_date": "2026-10-13",
             "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id],
         },
     )
 
@@ -43,15 +64,20 @@ def test_create_trip(client: TestClient) -> None:
     assert data["status"] == "PLANNING"
     assert data["created_at"] is not None
 
-
 def test_list_trips(client: TestClient) -> None:
     supplier_id = create_supplier(client)
+    first_fish_type_id = create_fish_type(client)
+    second_fish_type_id = client.post(
+        "/api/fish-types/",
+        json={"name": "Test Katla"},
+    ).json()["id"]
 
     first_response = client.post(
         "/api/trips/",
         json={
             "trip_date": "2026-10-12",
             "supplier_id": supplier_id,
+            "fish_type_ids": [first_fish_type_id],
         },
     )
     second_response = client.post(
@@ -59,6 +85,7 @@ def test_list_trips(client: TestClient) -> None:
         json={
             "trip_date": "2026-10-13",
             "supplier_id": supplier_id,
+            "fish_type_ids": [second_fish_type_id],
         },
     )
 
@@ -77,12 +104,14 @@ def test_list_trips(client: TestClient) -> None:
 
 def test_get_trip(client: TestClient) -> None:
     supplier_id = create_supplier(client)
+    fish_type_id = create_fish_type(client)
 
     create_response = client.post(
         "/api/trips/",
         json={
             "trip_date": "2026-10-13",
             "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id],
         },
     )
     assert create_response.status_code == 201, create_response.text
@@ -106,11 +135,13 @@ def test_get_nonexistent_trip(client: TestClient) -> None:
 def test_create_trip_with_nonexistent_supplier(
     client: TestClient,
 ) -> None:
+    fish_type_id = create_fish_type(client)
     response = client.post(
         "/api/trips/",
         json={
             "trip_date": "2026-10-13",
             "supplier_id": 999999,
+            "fish_type_ids": [fish_type_id],
         },
     )
 
@@ -122,12 +153,14 @@ def test_create_trip_with_inactive_supplier(
     client: TestClient,
 ) -> None:
     supplier_id = create_supplier(client, active=False)
+    fish_type_id = create_fish_type(client)
 
     response = client.post(
         "/api/trips/",
         json={
             "trip_date": "2026-10-13",
             "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id],
         },
     )
 
@@ -161,3 +194,104 @@ def test_create_trip_with_invalid_supplier_id(
     )
 
     assert response.status_code == 422
+
+def test_create_trip_with_nonexistent_fish_type(
+    client: TestClient,
+) -> None:
+    supplier_id = create_supplier(client)
+
+    response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [999999],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Fish type 999999 not found."
+
+
+def test_create_trip_with_inactive_fish_type(
+    client: TestClient,
+) -> None:
+    supplier_id = create_supplier(client)
+    fish_type_id = create_fish_type(client, active=False)
+
+    response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        f"Cannot add inactive fish type {fish_type_id} to a trip."
+    )
+
+
+def test_failed_trip_creation_does_not_create_trip(
+    client: TestClient,
+) -> None:
+    supplier_id = create_supplier(client)
+    fish_type_id = create_fish_type(client)
+
+    failed_response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [fish_type_id, 999999],
+        },
+    )
+
+    assert failed_response.status_code == 400
+
+    list_response = client.get("/api/trips/")
+
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+def test_create_trip_saves_selected_fish_types(
+    client: TestClient,
+    db_session,
+) -> None:
+    supplier_id = create_supplier(client)
+    first_fish_type_id = create_fish_type(client)
+
+    second_response = client.post(
+        "/api/fish-types/",
+        json={"name": "Test Katla"},
+    )
+    assert second_response.status_code == 201, second_response.text
+    second_fish_type_id = second_response.json()["id"]
+
+    response = client.post(
+        "/api/trips/",
+        json={
+            "trip_date": "2026-10-13",
+            "supplier_id": supplier_id,
+            "fish_type_ids": [
+                first_fish_type_id,
+                second_fish_type_id,
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    trip_id = response.json()["id"]
+
+    saved_fish_type_ids = db_session.scalars(
+        select(TripFishType.fish_type_id).where(
+            TripFishType.trip_id == trip_id
+        )
+    ).all()
+
+    assert set(saved_fish_type_ids) == {
+        first_fish_type_id,
+        second_fish_type_id,
+    }

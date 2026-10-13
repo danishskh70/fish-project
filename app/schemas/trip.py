@@ -1,11 +1,14 @@
-from datetime import date, datetime
 
+from datetime import date, datetime
+from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
+PositiveFishTypeId = Annotated[int, Field(gt=0)]
 
 class TripCreate(BaseModel):
     trip_date: date
     supplier_id: int = Field(gt=0)
+    fish_type_ids: list[PositiveFishTypeId] = Field(min_length=1)
 
 
 class TripRead(BaseModel):
