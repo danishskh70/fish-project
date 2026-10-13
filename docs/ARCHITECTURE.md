@@ -1,447 +1,310 @@
-# Target Architecture — Fish Seed Distribution Management App
+# ARCHITECTURE.md — System Architecture
 
-## 1. Purpose
+## 1. Architectural goals
 
-Define the intended architecture for the complete application.
+Build a small, explicit FastAPI application that can be understood and tested module by module. The application is owner-operated and transaction-heavy. Correctness, traceability, and safe historical changes matter more than generic abstractions.
 
-This is the target design. It is not a statement that every component already exists or that every technical decision is finalized.
+Architecture must support:
+- Master data and trip workflows.
+- Immutable supplier requirement revisions.
+- Actual stock movements and reconciliation.
+- Customer bills, payment transactions, allocations, and receivables.
+- Locked trip snapshots and correction drafts.
+- Append-only audit events.
+- A future payment gateway without coupling business logic to one provider.
 
-The architecture must support both:
+Do not replace the existing `~/projects/fish-project` repository. Inspect the current structure and reuse its `app/api`, `app/models`, `app/schemas`, `app/services`, `app/db`, `app/core`, migrations, and tests patterns.
 
-1. Reusable record-management capabilities for ordinary business entities.
-2. Explicit business workflows that require domain rules, decisions, calculations, and state transitions.
+## 2. Recommended logical layers
 
-The generic engine must not become a universal mechanism that hides or replaces business logic.
-
-## 2. Architectural Principles
-
-### 2.1 Separation of responsibilities
-
-Each component should have a clear responsibility.
-
-- API routers handle HTTP boundaries.
-- Schemas define input and output contracts.
-- Authentication identifies the user.
-- Authorization determines whether the user may perform an operation.
-- Specifications describe supported generic record behavior.
-- The record engine implements reusable record operations.
-- Domain services implement business operations.
-- Persistence components manage database access and transactions.
-- Workflow rules control valid state transitions.
-- React presents information and collects user input.
-
-### 2.2 Explicit business behavior
-
-Business rules must be expressed in identifiable, testable functions or services.
-
-Do not hide important behavior inside generic CRUD handlers, frontend components, model constructors, or scattered conditional expressions.
-
-### 2.3 Reuse without over-generalization
-
-Reuse stable patterns that occur across multiple record types.
-
-Do not build an abstraction solely because a future feature might need it.
-
-### 2.4 Traceability
-
-Important operations must be traceable from the API entry point through authorization, validation, business logic, persistence, and response.
-
-### 2.5 Incremental implementation
-
-The target architecture is designed for the complete product. Implementation must proceed in small, verified vertical slices.
-
-## 3. High-Level System
-
-The application has a React frontend, a FastAPI backend, and a relational database.
-
-The frontend communicates with the backend through defined HTTP APIs.
-
-The backend authenticates requests, validates inputs, authorizes operations, executes domain logic, persists changes, and returns structured responses.
-
-The database stores business entities, transaction records, workflow states, and relevant history.
-
-Do not allow the frontend to bypass backend business rules.
-
-## 4. Backend Layers
-
-### 4.1 Application entry point
-
+### API/router layer
 Responsibilities:
+- Define HTTP paths, methods, request/response schemas, status codes.
+- Resolve authenticated owner and database session.
+- Call one service operation.
+- Convert known domain errors into consistent HTTP errors.
+- Avoid embedding business calculations or multi-step persistence logic.
 
-- Create the FastAPI application.
-- Load application configuration.
-- Register API routers.
-- Configure middleware and exception handling.
-- Initialize and close resources where necessary.
-
-The entry point should compose the application, not contain individual business workflows.
-
-### 4.2 API routers
-
+### Schema layer
 Responsibilities:
+- Validate request shape and response contracts with Pydantic.
+- Distinguish create/update/read schemas.
+- Reject fields clients must not control, such as actor identity, locked state, computed totals, and current version.
+- Use explicit decimal and quantity constraints.
 
-- Define HTTP endpoints.
-- Declare request and response schemas.
-- Apply authentication and authorization dependencies.
-- Invoke the appropriate record or domain service.
-- Return appropriate HTTP responses.
-
-Routers must not become the primary location for business rules or database queries.
-
-### 4.3 Authentication and authorization
-
+### Service/domain layer
 Responsibilities:
-
-- Authenticate the owner using the chosen authentication mechanism.
-- Validate Bearer JWT credentials.
-- Identify the authenticated principal.
-- Enforce the permissions required by each operation.
-
-Authentication and authorization are separate concerns.
-
-The current application initially has one owner account. The initial WRITER-role learning requirement must be reconciled with the final owner-only model before authentication is finalized.
-
-### 4.4 Schemas
-
-Schemas define external input and output contracts.
-
-They must validate incoming data and shape API responses.
-
-A schema is not automatically a database model, a business entity, or a record specification. These concepts may share field names without sharing responsibilities.
-
-### 4.5 Record specifications
-
-A `Field` describes metadata about a supported field, such as its name, type, label, required status, and applicable validation or presentation information.
-
-A `RecordSpec` describes the generic behavior and metadata of one supported record type.
-
-The exact fields, validation strategy, serialization format, and extension points are to be designed during the learning phase.
-
-A specification must not become an unrestricted container for arbitrary business logic.
-
-### 4.6 Generic record engine
-
-The record engine provides reusable operations for record types whose behavior fits the common record model.
-
-Expected capabilities may include:
-
-- Listing records
-- Retrieving a record
-- Creating a record
-- Updating an allowed record
-- Deleting or deactivating a record where permitted
-- Applying specification-driven validation
-- Enforcing access and ownership constraints
-- Producing consistent responses
-
-These capabilities must be introduced only after their behavior and authorization rules are defined.
-
-Not every business object should support every generic operation. For example, completed payments and settlements may need reversal workflows rather than ordinary deletion.
-
-### 4.7 Domain services
-
-Domain services implement business-specific operations.
-
-Examples include:
-
-- Confirming a booking
-- Planning a procurement trip
-- Recording actual arrival quantities
-- Recording a shortage allocation
-- Recording a delivery
-- Recording a defect
-- Calculating a supplier settlement
-- Completing a trip
-
-These operations coordinate validation, state changes, calculations, persistence, and transaction boundaries.
-
-They must preserve owner-controlled decisions.
-
-### 4.8 Persistence
-
-Persistence components manage database interaction.
-
-Responsibilities include:
-
-- Querying and storing records
-- Defining relationships
-- Applying database constraints
-- Managing transaction boundaries
-- Supporting efficient data retrieval
-
-The project must choose a consistent persistence approach before introducing a large number of models and services.
-
-A separate repository layer is not mandatory merely for architectural appearance. Its value must be evaluated against the actual data-access complexity.
-
-## 5. Target Reusable Pattern
-
-The intended reusable pattern is:
-
-`RecordSpec → RecordService → Router Factory`
-
-The exact implementation may use factories, dependency injection, or other composition techniques where justified.
-
-### RecordSpec
-
-Defines the metadata and generic capabilities of a record type.
-
-### RecordService
-
-Implements the common record operations using the specification and persistence layer.
-
-### Router factory
-
-Creates consistent API endpoints for record types that fit the generic model.
-
-This pattern must be tested with more than one record type before being considered genuinely reusable.
-
-## 6. Generic Records Versus Domain Workflows
-
-The generic record engine and business workflow services are complementary.
-
-### Suitable candidates for generic record operations
-
-- Fish seed type master
-- Customer master
-- Supplier master, if the final model requires it
-- Other simple reference data
-
-### Candidates requiring domain-specific behavior
-
-- Bookings
-- Procurement trips
-- Quantity allocation
-- Deliveries
-- Customer payments
-- Defect and waste handling
-- Supplier settlements
-
-A domain entity may still use common record metadata or shared persistence utilities. That does not mean all of its behavior should be implemented by generic CRUD.
-
-The final classification must be confirmed as the domain model is designed.
-
-## 7. Business Domain Boundaries
-
-The target domain is organized around the following conceptual areas.
-
-### Reference data
-
-- Fish seed types
-- Customers
-- Suppliers
-- Distribution locations, if required
-- Pricing configuration
-
-### Booking
-
-- Customer booking
-- Booked seed-type lines
-- Applicable rates
-- Advances and payment associations
-- Booking state and history
-
-### Procurement
-
-- Trip planning
-- Supplier orders or planned quantities
-- Expected dates
-- Actual arrival
-- Accepted and rejected quantities
-- Vehicle charges
-- Supplier advances
-
-### Inventory and distribution
-
-- Accepted quantities
-- Allocation decisions
-- Distribution spots
-- Customer deliveries
-- Additional sales
-- Walk-in sales
-- Waste, defects, and remaining quantities
-- Transfers to the owner's pond
-
-### Finance
-
-- Customer payment records
-- Customer balances
-- Supplier settlement calculations
-- Supplier payments and balances
-- Approved deductions
-- Reconciliation and reports
-
-These are conceptual boundaries, not a finalized database schema. Exact entities, relationships, and ownership must be designed and documented before their implementation.
-
-## 8. Data Model Principles
-
-- Represent distinct business concepts explicitly.
-- Use stable identifiers for persistent records.
-- Define relationships and their cardinalities intentionally.
-- Preserve historical prices and transaction quantities.
-- Avoid duplicating authoritative data without a clear reason.
-- Use explicit transaction records for money movements.
-- Distinguish planned, received, accepted, rejected, delivered, wasted, and remaining quantities.
-- Prevent double-counting of inventory and financial deductions.
-- Use constraints to protect data integrity.
-- Model corrections in a way that preserves relevant history.
-
-The exact database tables, foreign keys, uniqueness rules, indexes, and delete behavior remain to be finalized.
-
-## 9. Transactions and Concurrency
-
-Operations that must succeed or fail together must use a database transaction.
-
-Examples include recording an accepted arrival quantity alongside its inventory movement, or completing a settlement alongside its payment records.
-
-The application must prevent partial persistence when an operation fails.
-
-Concurrency controls should be introduced where concurrent requests could cause incorrect quantities, duplicate payments, or inconsistent workflow transitions.
-
-The specific locking or optimistic-concurrency strategy remains open.
-
-## 10. Workflow Architecture
-
-Workflow transitions must be explicit.
-
-A workflow operation should:
-
-1. Load the relevant records.
-2. Validate the current state.
-3. Validate required inputs.
-4. Check authorization.
-5. Apply business rules.
-6. Persist all required changes atomically.
-7. Record important decisions and changes.
-8. Return the resulting state.
-
-The exact sequence of validation and authorization may vary by operation, but security and integrity checks must never be bypassed.
-
-Valid states and transitions must be defined for bookings, trips, distribution, payments, and supplier settlement before those workflows are implemented.
-
-## 11. Error Handling
-
-The backend must distinguish relevant failure categories, including:
-
-- Invalid input
-- Missing records
-- Unauthorized requests
-- Forbidden operations
-- Invalid workflow transitions
-- Conflicting updates
-- Insufficient available quantity
-- Database or unexpected internal errors
-
-The API must return consistent, useful error responses without leaking credentials, secrets, or internal stack traces.
-
-The precise error response schema remains to be defined.
-
-## 12. React Frontend
-
-The frontend must separate:
-
-- Pages and layouts
-- Reusable presentation components
-- API communication
-- Form state and client-side validation
-- Authentication state
-- Domain-specific user workflows
-
-The frontend may improve usability with early validation, but the backend remains authoritative for business rules.
-
-The target UI must support the owner's real operational workflow rather than expose only a list of database tables.
-
-Generic record screens can be reused for suitable master data. Business workflows may require dedicated screens and actions.
-
-## 13. Testing Strategy
-
-The project must verify behavior at several levels.
-
-### Unit tests
-
-Test validation rules, calculations, and domain decisions.
-
-### API tests
-
-Test HTTP contracts, authentication, authorization, error responses, and persistence behavior.
-
-### Transaction and integrity tests
-
-Verify that operations roll back correctly and cannot leave inconsistent data.
-
-### Integration tests
-
-Verify the interaction among routers, services, and the database.
-
-### Frontend and end-to-end tests
-
-Verify important user journeys through the React UI and FastAPI API.
-
-High-risk calculations and workflow transitions must have explicit tests.
-
-## 14. Security
-
-- Require authentication for protected operations.
-- Enforce authorization on the backend.
-- Never trust an owner identifier supplied by the client when it should come from authenticated identity.
-- Validate external input.
-- Store credentials and secrets securely.
-- Do not expose secrets in logs or API responses.
-- Use safe database operations.
-- Restrict destructive operations and preserve financial history.
-- Apply production deployment protections before exposing the service publicly.
-
-## 15. Observability and Audit History
-
-The application should provide enough logging to diagnose failures and understand important operational events.
-
-Logs must not expose sensitive credentials.
-
-Business audit history and technical logs serve different purposes. Financial changes and important owner decisions may require durable audit records beyond ordinary application logs.
-
-The final audit schema, retention policy, and reporting needs remain open.
-
-## 16. Deployment Architecture
-
-Development currently uses a local FastAPI server and local React development tooling.
-
-Production deployment details have not yet been finalized.
-
-Before deployment, decide and document:
-
-- Hosting environment
-- Database location and backup strategy
-- Application process management
-- Frontend serving
-- HTTPS and reverse proxy configuration
-- Secret management
-- Database migrations
-- Logging and monitoring
-- Recovery procedures
-
-Do not treat local development configuration as a production deployment plan.
-
-## 17. Architectural Decision Rules
-
-Before introducing a new abstraction:
-
-1. Identify the concrete problem it solves.
-2. Identify which existing components are insufficient.
-3. Compare simpler alternatives.
-4. Consider the cost of maintaining the abstraction.
-5. Record the decision in `DECISIONS.md`.
-
-Before changing the target architecture:
-
-1. Identify the requirement or evidence that motivates the change.
-2. Identify affected components and workflows.
-3. Consider migration and compatibility effects.
-4. Update the documentation.
-5. Implement and verify the change in a controlled step.
-
-## 18. Architecture Status
-
-The overall separation between reusable record operations and domain-specific workflows is the intended direction.
-
-The exact database schema, persistence implementation, transaction strategy, error contract, frontend organization, and production deployment are not all finalized.
-
-Do not claim these details are confirmed until they have been decided and recorded.
+- Enforce business rules and state transitions.
+- Perform calculations and orchestrate transactions.
+- Enforce lock/unlock rules, allocations, stock movement rules, versioning, and audit events.
+- Be testable without HTTP.
+
+### Model/persistence layer
+Responsibilities:
+- SQLAlchemy tables, relationships, constraints, indexes, and foreign keys.
+- Use PostgreSQL as production database.
+- Avoid model methods that hide complex workflow side effects.
+
+### Database/session layer
+Responsibilities:
+- Create engine/session from configuration.
+- Use one transaction per atomic service operation.
+- Roll back completely on failure.
+- Migrations managed by Alembic.
+
+### Frontend (not finalized)
+UI should call API contracts and present owner-focused screens. Keep UI choices out of backend business rules. Server is authoritative for totals, permissions, state, and audit. Client may preview arithmetic for speed, but server recomputes and validates it.
+
+## 3. Suggested module layout
+
+Adapt to the existing repository rather than mechanically creating every file immediately.
+
+```text
+app/
+  api/
+    auth.py
+    health.py
+    fish_types.py
+    customers.py
+    suppliers.py
+    meeting_points.py
+    trips.py
+    trip_customers.py
+    supplier_requirements.py
+    receiving.py
+    deliveries.py
+    payments.py
+    customer_balances.py
+    returns.py
+    defects.py
+    expenses.py
+    reconciliation.py
+    reports.py
+    audit.py
+  core/
+    config.py
+    security.py
+    errors.py
+  db/
+    session.py
+    base.py
+  models/
+    user.py
+    fish_type.py
+    customer.py
+    supplier.py
+    meeting_point.py
+    trip.py
+    trip_customer.py
+    trip_fish_plan.py
+    supplier_requirement_revision.py
+    supplier_requirement_line.py
+    stock_movement.py
+    receiving_line.py
+    supplier_return.py
+    defect_record.py
+    delivery.py
+    delivery_line.py
+    bill_adjustment.py
+    payment.py
+    payment_allocation.py
+    settlement_adjustment.py
+    supplier_payment.py
+    supplier_credit.py
+    trip_expense.py
+    reconciliation.py
+    trip_version.py
+    correction_draft.py
+    audit_event.py
+  schemas/
+  services/
+  repositories/  # optional; add only if query complexity justifies it
+migrations/
+tests/
+  unit/
+  api/
+  integration/
+```
+
+This is a target shape, not a requirement to create empty modules all at once. Existing master files remain in place and can be extended gradually.
+
+## 4. Core domain model and relationships
+
+### Identity and master data
+- `User`: owner login, password hash, active flag, security timestamps.
+- `FishType`: name, active flag, created/updated timestamps.
+- `Customer`: display name, contact details, active flag, default meeting point reference.
+- `Supplier`: name/contact/active flag.
+- `MeetingPoint`: name, active flag, optional display/order metadata.
+
+Master records should generally be deactivated rather than deleted when referenced by transactions.
+
+### Trip and plan
+- `Trip`: date, one supplier, lifecycle state, current version number, locked status, created/updated metadata.
+- `TripCustomer`: trip/customer link, inclusion, meeting-point snapshot/override, ordering fields.
+- `TripPlannedLine` or equivalent: trip/customer/fish type, planned quantity. Store quantities for the new trip independently of source trip.
+- Trip-level selling-rate defaults per fish type.
+- Customer-specific trip rate overrides per fish type.
+
+A customer master default and trip-specific values are distinct. A trip's order or meeting-point override cannot mutate a customer's default.
+
+### Supplier requirement revisions
+- `SupplierRequirementRevision`: trip, revision number, status/draft/sent, sent timestamp, actor, snapshot metadata.
+- `SupplierRequirementLine`: revision, fish type, suggested quantity, requested quantity, optional notes/rate if required.
+- Sent revisions are immutable. A later change produces a new revision. Use database constraints to ensure revision number uniqueness per trip.
+
+### Receiving and stock
+- `ReceivingLine`: trip, fish type, actual quantity received, agreed supplier rate, time, notes.
+- `StockMovement`: canonical movement ledger entry with trip, fish type, movement type, signed/typed quantity, source record, timestamp, actor.
+- `SupplierReturn`: return metadata, fish type quantities, handling method, expected credit.
+- `SupplierCredit`: actual confirmed credit/refund, amount, confirmation timestamp, notes.
+- `DefectRecord`: trip, fish type, quantity, category/location, optional customer delivery link, status and notes.
+- `DriverReportLine`: trip, fish type, driver-reported quantity and source time, entered by owner, notes.
+- Avoid storing the same movement twice as separate authoritative totals. Either create the movement ledger from source events in the same transaction or make source lines the canonical ledger and compute balances consistently.
+
+### Delivery and billing
+- `Delivery`: trip/customer, status (draft/confirmed), confirmation time, creator, optional notes.
+- `DeliveryLine`: delivery, fish type, planned quantity snapshot, actual quantity, applied selling rate, computed line amount or safely recomputable amount.
+- `BillAdjustment`: delivery/trip, amount, category/reason, actor/time; cannot silently alter a line price.
+- A delivery draft is excluded from confirmed stock and sales totals.
+- Applied rate and quantity are snapshotted on confirmed bill lines. A later default rate change must not rewrite past confirmed bill lines.
+
+### Payments and receivables
+- `Payment`: customer, amount, currency, method, status, received/confirmed timestamp, external reference if any, note, actor.
+- `PaymentAllocation`: payment, trip/customer receivable, allocated amount. One payment may be allocated to multiple trip balances only if owner explicitly chooses a split.
+- `SettlementAdjustment`: customer/trip, amount, category (waived/discount or no-longer-pursued), reason, actor/time.
+- Balance is derived from bill/adjustment/payment allocation records, not an independently overwritten `paid_amount`.
+- Enforce allocation sum <= confirmed payment amount. Excess is held as unallocated customer credit or explicitly handled by the selected overpayment policy.
+
+### Supplier settlement and expenses
+- `SupplierPayment`: trip/supplier, amount, method/date/reference.
+- `SupplierCredit`: confirmed supplier refund/credit, distinct from expected credit.
+- `TripExpense`: trip, category, amount, date, note, actor.
+- Supplier payable is calculated from confirmed received quantities/rates and valid adjustments according to agreed supplier-cost policy, less payments/confirmed credits.
+
+### Reconciliation, versions, and audit
+- `Reconciliation`: trip, type (quantity/money), status, confirmation actor/time, snapshot of totals and discrepancy items, notes.
+- `TripVersion`: trip, version number, immutable snapshot/payload or normalized version reference, created actor/time, lock timestamp, reconciliation references, change summary.
+- `CorrectionDraft`: trip, base locked version, mutable working data or staged edits, owner, reason for unlock, created/updated timestamps, optimistic revision.
+- `AuditEvent`: append-only event with actor, action, entity type/id, trip/version, timestamp, reason, before/after diff, correlation/request id.
+- Payment events after a trip is locked are separate ledger events. Current financial display can derive updated balances without rewriting the old locked snapshot. Clearly distinguish “trip version snapshot at lock time” from “current payment ledger/balance.”
+
+## 5. Critical modeling distinction: operational version vs live ledger
+
+A completed trip has a locked operational snapshot: planned/actual quantities, applied rates, supplier requirement revision, stock records, reconciled state, and financial figures as known at lock time. Later payment collection changes the live payment ledger and outstanding balance. It does not alter the locked bill or silently rewrite the old snapshot.
+
+When the UI opens a trip, show:
+- `Vn — Current`
+- `Locked` or `Correction draft in progress`
+- Snapshot financial state at lock time if useful
+- Current live payments and outstanding balances
+- Clear timestamps and links to audit/payment history
+
+If a trip correction is saved, create a new current version after re-reconciliation and lock. Previous versions remain viewable. Avoid pretending a later payment created a new trip version unless product behavior is explicitly changed.
+
+## 6. State and transaction design
+
+### Trip states
+Use a domain state machine. Suggested states:
+`DRAFT → PLANNED → DISTRIBUTING → RECONCILING → COMPLETED/LOCKED`
+
+A completed trip can enter a separate correction workspace only after owner re-authentication and reason. The current locked version remains the baseline while the correction draft exists. Saving/finalizing the correction produces the next version after required validation and reconciliation. A correction draft does not make the baseline mutable.
+
+### Delivery states
+`DRAFT → CONFIRMED`
+A confirmed delivery may be corrected only under the authorized correction workflow for locked trips. Drafts do not generate confirmed stock movements or sales.
+
+### Payment states
+Manual payment: recorded/confirmed by owner. Gateway payment: pending until server-side provider verification; failed/cancelled/unverified statuses do not reduce receivable. Corrections use reversal entries rather than deletion.
+
+### Atomic transactions
+The following should be atomic:
+- Confirm delivery + its stock movement/bill lines.
+- Record payment + allocation + audit event.
+- Confirm supplier return + stock movement + expected-credit record.
+- Confirm actual supplier credit.
+- Finalize reconciliation + create trip version + lock trip.
+- Save a finalized correction version + audit diff + lock transition.
+
+Use `session.begin()` or equivalent transaction boundaries. On any failure, all related writes roll back.
+
+## 7. API conventions
+
+Use versioned or consistently namespaced API paths under `/api`. Existing paths should be preserved unless a deliberate migration is planned.
+
+Representative endpoints (illustrative; finalize names with implementation):
+- `POST /api/auth/login`
+- `GET/POST /api/fish-types`, `PATCH /api/fish-types/{id}`
+- `GET/POST /api/customers`, `PATCH /api/customers/{id}`
+- `GET/POST /api/suppliers`, `PATCH /api/suppliers/{id}`
+- `GET/POST /api/meeting-points`
+- `GET/POST /api/trips`
+- `GET /api/trips/{id}` — current view with version/lock status and live balance summary
+- `POST /api/trips/{id}/customers`
+- `PUT /api/trips/{id}/plan`
+- `POST /api/trips/{id}/supplier-requirements/revisions`
+- `POST /api/trips/{id}/supplier-requirements/{revision}/mark-sent`
+- `POST /api/trips/{id}/receiving`
+- `POST /api/trips/{id}/deliveries`
+- `PATCH /api/deliveries/{id}` — draft only, subject to state/lock rules
+- `POST /api/deliveries/{id}/confirm`
+- `POST /api/customers/{id}/payments`
+- `POST /api/payments/{id}/allocations`
+- `POST /api/trips/{id}/returns`
+- `POST /api/trips/{id}/expenses`
+- `POST /api/trips/{id}/reconciliation/quantity/confirm`
+- `POST /api/trips/{id}/reconciliation/money/confirm`
+- `POST /api/trips/{id}/complete`
+- `POST /api/trips/{id}/unlock`
+- `GET /api/trips/{id}/versions`
+- `GET /api/trips/{id}/audit`
+- `GET /api/customers/{id}/balances`
+- `GET /api/trips/{id}/report`
+
+API actions should be explicit for consequential transitions. Do not let generic PATCH update `status=locked`, `current_version`, `owner_id`, computed balances, or audit data.
+
+## 8. Validation and concurrency
+
+- Use decimal arithmetic for money and rates; use database numeric columns.
+- Validate quantity is non-negative; apply positive-only rules where a movement must actually move stock.
+- Validate all IDs belong to the correct trip/customer/supplier relationship.
+- A payment allocation cannot exceed the payment's remaining allocatable amount.
+- A trip customer delivery must reference a customer included in that trip, unless owner explicitly adds them first.
+- Do not confirm deliveries with incomplete lines or invalid rates.
+- Do not close without both reconciliation confirmations.
+- Do not allow normal writes against locked trip state.
+- Use optimistic locking/revision numbers on correction drafts to prevent stale writes.
+- Add uniqueness constraints for trip/version number, trip/supplier-revision number, and idempotency keys where used.
+- Use PostgreSQL transactions and constraints for critical invariants; do not rely only on front-end validation.
+
+## 9. Security and audit
+
+- Never store plaintext password or secrets in repository.
+- Keep configuration in environment variables or a local ignored env file.
+- All business actions use authenticated owner identity.
+- Audit sensitive actions with structured before/after diffs.
+- Audit entries are append-only in application behavior. Do not expose update/delete endpoints.
+- Unlock event must include reason and re-authentication result, without recording the password.
+- Payment reversal is a compensating event, not deletion.
+- Do not log payment secrets, JWTs, passwords, or gateway credentials.
+- Production deployment must use HTTPS and a backup plan.
+
+## 10. Testing strategy
+
+- Unit tests: calculations, settlement threshold, state machine, stock ledger, payment allocation.
+- API tests: auth, validation, response shape, authorization, invalid transitions.
+- Database integration tests: PostgreSQL constraints, transactions, migrations, decimal arithmetic, concurrent writes.
+- Audit tests: previous version preserved, diff recorded, no normal audit mutation.
+- Workflow tests: plan → requirement send/revision → receiving → deliveries → payments → reconciliation → lock → later payment → correction draft → new version.
+- Failure tests: rollback on error, duplicate submit, invalid payment, stale draft, unauthorized unlock.
+- Existing SQLite tests can remain for quick feedback, but PostgreSQL integration tests should validate production-critical behavior.
+
+## 11. Deployment and operations
+
+- Use environment-based configuration.
+- Use Alembic migrations as the only normal schema evolution path.
+- Provide backup and restore instructions; test restore.
+- Add structured logs and health endpoint.
+- Use database connection management and production process configuration.
+- Keep payment gateway secrets out of source control.
+- Frontend/deployment platform remains an open decision; architecture must not assume it.

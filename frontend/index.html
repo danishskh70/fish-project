@@ -5,10 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fish Distribution Manager</title>
   <link rel="stylesheet" href="/static/styles.css">
+  <!-- Fallback so the toolbar is always visible even if styles.css is cached -->
+  <style>
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .toolbar .search-input { flex: 1 1 240px; margin-bottom: 0; }
+    .toolbar .sort-select {
+      padding: 9px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      background: #fff;
+      min-width: 140px;
+    }
+  </style>
 </head>
 <body>
   <div class="app">
-    <!-- ========== SIDEBAR ========== -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <h2>🐟 Fish Manager</h2>
@@ -27,23 +39,18 @@
       </div>
     </aside>
 
-    <!-- ========== MAIN ========== -->
     <main class="main-content">
-
       <!-- TRIPS -->
       <section id="view-trips" class="view active">
         <div class="view-header">
           <h1>Trips</h1>
           <button id="create-trip-btn" class="btn btn-primary">+ New Trip</button>
         </div>
-
         <div id="trips-list-container" class="card">
           <div id="trips-loading" class="loading">Loading trips…</div>
           <div id="trips-empty" class="empty-state hidden">No trips yet. Create your first trip.</div>
           <ul id="trips-list" class="trip-list"></ul>
         </div>
-
-        <!-- Trip workspace -->
         <div id="trip-workspace" class="hidden">
           <div class="trip-header card">
             <div class="trip-info">
@@ -52,36 +59,28 @@
             </div>
             <div class="trip-actions">
               <button id="add-customer-to-trip-btn" class="btn btn-secondary">+ Add Customer</button>
+              <button id="copy-customers-btn" class="btn btn-secondary">Copy Customers From…</button>
               <button id="add-fish-to-trip-btn" class="btn btn-secondary">+ Add Fish Type</button>
               <button id="back-to-trips-btn" class="btn btn-outline">← All Trips</button>
             </div>
           </div>
-
           <div class="card">
             <h3>Trip requirements</h3>
-            <p class="muted" id="requirements-subtitle">
-              Quantities measured in bags
-            </p>
-
+            <p class="muted" id="requirements-subtitle">Quantities measured in bags</p>
             <div id="requirements-loading" class="loading hidden">Loading requirements…</div>
             <div id="requirements-error" class="error hidden"></div>
-
-            <!-- Empty: no customers -->
             <div id="requirements-empty" class="empty-state hidden">
               <p>No customers assigned to this trip.</p>
               <button id="empty-add-customer-btn" class="btn btn-primary btn-sm" style="margin-top:12px;">
                 + Add an existing customer
               </button>
             </div>
-
-            <!-- Empty: no fish types -->
             <div id="requirements-no-fish" class="empty-state hidden">
               <p>This trip has no configured fish types.</p>
               <button id="empty-add-fish-btn" class="btn btn-primary btn-sm" style="margin-top:12px;">
                 + Add a fish type
               </button>
             </div>
-
             <div class="table-wrapper">
               <table id="requirements-table">
                 <thead id="requirements-thead"></thead>
@@ -100,7 +99,19 @@
           <button id="create-customer-btn" class="btn btn-primary">+ New Customer</button>
         </div>
         <div class="card">
-          <input type="text" id="customer-search" placeholder="Search by name or mobile…" class="search-input">
+          <div class="toolbar">
+            <input type="text" id="customer-search" placeholder="Search by name or phone…" class="search-input">
+            <select id="customer-sort-by" class="sort-select">
+              <option value="">Sort by…</option>
+              <option value="id">ID</option>
+              <option value="name">Name</option>
+            </select>
+            <select id="customer-sort-order" class="sort-select">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+            <button id="customer-refresh-btn" class="btn btn-outline btn-sm">Refresh</button>
+          </div>
           <div id="customers-loading" class="loading">Loading customers…</div>
           <div id="customers-empty" class="empty-state hidden">No customers found.</div>
           <ul id="customers-list" class="customer-list"></ul>
@@ -114,6 +125,19 @@
           <button id="create-fish-type-btn" class="btn btn-primary">+ New Fish Type</button>
         </div>
         <div class="card">
+          <div class="toolbar">
+            <input type="text" id="fish-type-search" placeholder="Search by name…" class="search-input">
+            <select id="fish-type-sort-by" class="sort-select">
+              <option value="">Sort by…</option>
+              <option value="id">ID</option>
+              <option value="name">Name</option>
+            </select>
+            <select id="fish-type-sort-order" class="sort-select">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+            <button id="fish-type-refresh-btn" class="btn btn-outline btn-sm">Refresh</button>
+          </div>
           <div id="fish-types-loading" class="loading">Loading fish types…</div>
           <div id="fish-types-empty" class="empty-state hidden">No fish types defined.</div>
           <ul id="fish-types-list" class="fish-type-list"></ul>
@@ -127,6 +151,19 @@
           <button id="create-supplier-btn" class="btn btn-primary">+ New Supplier</button>
         </div>
         <div class="card">
+          <div class="toolbar">
+            <input type="text" id="supplier-search" placeholder="Search by name or phone…" class="search-input">
+            <select id="supplier-sort-by" class="sort-select">
+              <option value="">Sort by…</option>
+              <option value="id">ID</option>
+              <option value="name">Name</option>
+            </select>
+            <select id="supplier-sort-order" class="sort-select">
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+            <button id="supplier-refresh-btn" class="btn btn-outline btn-sm">Refresh</button>
+          </div>
           <div id="suppliers-loading" class="loading">Loading suppliers…</div>
           <div id="suppliers-empty" class="empty-state hidden">No suppliers defined.</div>
           <ul id="suppliers-list" class="supplier-list"></ul>
@@ -135,7 +172,6 @@
     </main>
   </div>
 
-  <!-- MODAL -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">

@@ -16,6 +16,8 @@
   --success-text: #065f46;
   --danger-bg: #fee2e2;
   --danger-text: #991b1b;
+  --danger: #ef4444;
+  --danger-dark: #dc2626;
   --radius: 10px;
   --radius-sm: 6px;
 }
@@ -30,7 +32,7 @@ body {
 
 .app { display: flex; min-height: 100vh; }
 
-/* ===== Sidebar ===== */
+/* Sidebar */
 .sidebar {
   width: 250px;
   background: var(--primary);
@@ -73,7 +75,7 @@ body {
   word-break: break-word; line-height: 1.4;
 }
 
-/* ===== Main ===== */
+/* Main */
 .main-content {
   flex: 1;
   padding: 32px;
@@ -88,7 +90,7 @@ body {
 }
 .view-header h1 { font-size: 1.6rem; font-weight: 600; }
 
-/* ===== Cards ===== */
+/* Cards */
 .card {
   background: var(--surface);
   border-radius: var(--radius);
@@ -98,7 +100,7 @@ body {
 }
 .card h3 { font-size: 1.05rem; margin-bottom: 6px; }
 
-/* ===== Buttons ===== */
+/* Buttons */
 .btn {
   padding: 9px 16px;
   border: none;
@@ -117,9 +119,36 @@ body {
 .btn-secondary:hover:not(:disabled) { background: var(--border-strong); }
 .btn-outline { background: transparent; border: 1px solid var(--border-strong); color: var(--text); }
 .btn-outline:hover:not(:disabled) { background: #f9fafb; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover:not(:disabled) { background: var(--danger-dark); }
 .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-/* ===== Tables ===== */
+/* Row action group inside list items */
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* Toolbar (search + sort) */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.toolbar .search-input { flex: 1 1 240px; margin-bottom: 0; }
+.toolbar .sort-select {
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-family: inherit;
+  background: white;
+}
+.toolbar .sort-select:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(30,58,95,0.1);
+}
+
+/* Tables */
 .table-wrapper {
   overflow-x: auto;
   margin-top: 12px;
@@ -147,7 +176,6 @@ th {
 }
 tbody tr:hover { background: #f9fafb; }
 
-/* Totals footer — visually distinct */
 tfoot td {
   font-weight: 700;
   background: #eef2f7;
@@ -155,9 +183,12 @@ tfoot td {
   border-bottom: none;
   color: var(--primary);
 }
-tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spacing: .04em; }
+tfoot .totals-label {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: .04em;
+}
 
-/* Clickable customer name */
 .customer-link {
   color: var(--primary);
   font-weight: 600;
@@ -168,16 +199,20 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
 }
 .customer-link:hover { text-decoration-color: var(--primary); }
 
-/* ===== Lists ===== */
+/* Lists */
 .trip-list, .customer-list, .fish-type-list, .supplier-list { list-style: none; }
 .trip-list li, .customer-list li, .fish-type-list li, .supplier-list li {
   padding: 14px 4px;
   border-bottom: 1px solid var(--border);
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap;
 }
 .trip-list li:last-child, .customer-list li:last-child,
 .fish-type-list li:last-child, .supplier-list li:last-child { border-bottom: none; }
-.trip-list li { cursor: pointer; transition: background .15s; padding: 14px 12px; border-radius: var(--radius-sm); }
+.trip-list li {
+  cursor: pointer; transition: background .15s;
+  padding: 14px 12px; border-radius: var(--radius-sm);
+}
 .trip-list li:hover { background: #f9fafb; }
 .trip-info h4, .customer-info h4, .fish-info h4, .supplier-info h4 {
   font-size: 0.95rem; font-weight: 600; margin-bottom: 3px;
@@ -186,7 +221,15 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
   font-size: 0.82rem; color: var(--text-muted);
 }
 
-/* ===== Badges ===== */
+/* Dim inactive items */
+.list-item-inactive .customer-info h4,
+.list-item-inactive .fish-info h4,
+.list-item-inactive .supplier-info h4 { color: var(--text-muted); }
+.list-item-inactive .customer-info p,
+.list-item-inactive .fish-info p,
+.list-item-inactive .supplier-info p { opacity: .7; }
+
+/* Badges */
 .badge {
   font-size: 0.72rem; padding: 3px 9px; border-radius: 12px;
   font-weight: 500; text-transform: capitalize;
@@ -199,7 +242,7 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
   font-weight: 500; text-transform: capitalize;
 }
 
-/* ===== Search ===== */
+/* Search */
 .search-input {
   width: 100%;
   padding: 10px 14px;
@@ -214,7 +257,7 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
   box-shadow: 0 0 0 3px rgba(30,58,95,0.1);
 }
 
-/* ===== States ===== */
+/* States */
 .loading { text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.9rem; }
 .empty-state {
   text-align: center; padding: 32px 16px;
@@ -233,7 +276,7 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
 .muted { color: var(--text-muted); font-size: 0.85rem; }
 .hidden { display: none !important; }
 
-/* ===== Modal ===== */
+/* Modal */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.5);
@@ -263,7 +306,7 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
   display: flex; justify-content: flex-end; gap: 10px;
 }
 
-/* ===== Forms ===== */
+/* Forms */
 .form-group { margin-bottom: 16px; }
 .form-group label {
   display: block; font-size: 0.82rem; font-weight: 500;
@@ -289,14 +332,14 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
 .checkbox-group label:hover { background: #f9fafb; }
 .checkbox-group input[type="checkbox"] { width: auto; margin: 0; }
 
-/* ===== Trip header ===== */
+/* Trip header */
 .trip-header {
   display: flex; justify-content: space-between;
   align-items: flex-start; flex-wrap: wrap; gap: 16px;
 }
 .trip-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-/* ===== Responsive ===== */
+/* Responsive */
 @media (max-width: 768px) {
   .app { flex-direction: column; }
   .sidebar {
@@ -318,4 +361,5 @@ tfoot .totals-label { text-transform: uppercase; font-size: 0.75rem; letter-spac
   .trip-header { flex-direction: column; }
   .trip-actions { width: 100%; }
   .trip-actions .btn { flex: 1; }
+  .toolbar { flex-direction: column; align-items: stretch; }
 }
