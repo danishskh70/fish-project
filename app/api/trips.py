@@ -4,17 +4,18 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.schemas.trip import TripCreate, TripFishTypeAdd, TripRead
+from app.schemas.trip_requirements_table import TripRequirementsTableRead
 from app.services.trip import (
     add_fish_type_to_trip,
     create_trip,
     get_trip,
     list_trips,
 )
-from app.schemas.trip_requirements_table import TripRequirementsTableRead
 from app.services.trip_requirements_table import (
     TripRequirementsTableNotFoundError,
     get_trip_requirements_table,
 )
+
 router = APIRouter(prefix="/trips", tags=["Trips"])
 
 

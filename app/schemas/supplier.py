@@ -2,7 +2,6 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
-
 SupplierName = Annotated[
     str,
     StringConstraints(

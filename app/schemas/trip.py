@@ -1,6 +1,7 @@
 
 from datetime import date, datetime
 from typing import Annotated
+
 from pydantic import BaseModel, ConfigDict, Field
 
 PositiveFishTypeId = Annotated[int, Field(gt=0)]

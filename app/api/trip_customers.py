@@ -9,14 +9,13 @@ from app.schemas.trip_customer import (
 from app.services.trip_customer import (
     CustomerNotFoundError,
     DuplicateTripCustomerError,
-    SameTripCopyError,
     InactiveCustomerError,
+    SameTripCopyError,
     TripNotFoundError,
     add_customer_to_trip,
-    list_trip_customers,
     copy_customers_from_trip,
+    list_trip_customers,
 )
-
 
 router = APIRouter(prefix="/trips", tags=["Trip Customers"])
 

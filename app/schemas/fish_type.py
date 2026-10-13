@@ -1,6 +1,6 @@
-from pydantic import BaseModel, ConfigDict, StringConstraints
 from typing import Annotated
 
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 FishTypeName = Annotated[
     str,

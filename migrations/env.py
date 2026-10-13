@@ -1,18 +1,13 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
-from app.db.session import Base
-from app.models.fish_type import FishType
-from app.models.customer import Customer
-from app.models.supplier import Supplier  # noqa: F401
-from app.models.trip import Trip
-from app.models.trip_customer import TripCustomer  # noqa: F401
-from app.models.trip_customer_requirement import TripCustomerRequirement
-from app.models.trip_fish_type import TripFishType  # noqa: F401
+from sqlalchemy import engine_from_config, pool
+
 from app.core.config import settings
+from app.db.session import Base
+from app.models.supplier import Supplier  # noqa: F401
+from app.models.trip_customer import TripCustomer  # noqa: F401
+from app.models.trip_fish_type import TripFishType  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

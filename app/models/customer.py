@@ -3,6 +3,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
 
+
 class Customer(Base):
     __tablename__="customers"
     

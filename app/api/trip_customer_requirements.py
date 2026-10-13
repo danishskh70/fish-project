@@ -19,7 +19,6 @@ from app.services.trip_customer_requirement import (
     update_requirement,
 )
 
-
 router = APIRouter(
     prefix="/trips",
     tags=["Trip Customer Requirements"],

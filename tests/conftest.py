@@ -4,9 +4,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-
-from app.db.session import Base
 from app.api.deps import get_db
+from app.db.session import Base
 from app.models.customer import Customer  # noqa: F401
 from app.models.fish_type import FishType  # noqa: F401
 from app.models.supplier import Supplier  # noqa: F401

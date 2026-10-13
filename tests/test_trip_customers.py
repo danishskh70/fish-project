@@ -254,7 +254,7 @@ def test_copy_customers_skips_inactive_customers(
     client: TestClient,
 ) -> None:
     source_trip_id = create_trip(client)
-    destination_trip_id = create_trip(client)
+    create_trip(client)
 
 
     active_customer_id = create_customer(client)

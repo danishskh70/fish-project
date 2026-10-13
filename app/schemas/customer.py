@@ -5,8 +5,7 @@ from pydantic import (
     ConfigDict,
     StringConstraints,
     model_validator,
-  )
-
+)
 
 CustomerName = Annotated[
     str,

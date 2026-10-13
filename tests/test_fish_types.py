@@ -34,10 +34,10 @@ def test_reject_duplicate_fish_type_name(client):
 
 
 def test_reject_duplicate_name_during_update(client):
-    rohu = client.post(
-        "/api/fish-types/",
-        json={"name": "Rohu"},
-    ).json()
+    client.post(
+    "/api/fish-types/",
+    json={"name": "Rohu"},
+)
 
     katla = client.post(
         "/api/fish-types/",
