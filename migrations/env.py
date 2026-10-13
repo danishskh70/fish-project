@@ -8,6 +8,8 @@ from app.db.session import Base
 from app.models.fish_type import FishType
 from app.models.customer import Customer
 from app.models.supplier import Supplier  # noqa: F401
+from app.models.trip import Trip
+from app.models.trip_customer import TripCustomer  # noqa: F401
 
 from app.core.config import settings
 

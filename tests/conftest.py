@@ -8,6 +8,9 @@ from app.db.session import Base
 from app.api.deps import get_db
 from app.models.customer import Customer  # noqa: F401
 from app.models.fish_type import FishType  # noqa: F401
+from app.models.supplier import Supplier  # noqa: F401
+from app.models.trip import Trip  # noqa: F401
+from app.models.trip_customer import TripCustomer  # noqa: F401
 from main import app
 
 
