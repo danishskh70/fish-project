@@ -10,6 +10,7 @@ from app.models.customer import Customer
 from app.models.supplier import Supplier  # noqa: F401
 from app.models.trip import Trip
 from app.models.trip_customer import TripCustomer  # noqa: F401
+from app.models.trip_customer_requirement import TripCustomerRequirement
 
 from app.core.config import settings
 

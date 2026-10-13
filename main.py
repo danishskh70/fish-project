@@ -5,6 +5,10 @@ from app.api.customers import router as customers_router
 from app.api.suppliers import router as suppliers_router
 from app.api.trips import router as trips_router
 from app.api.trip_customers import router as trip_customers_router
+from app.api.trip_customer_requirements import (
+    router as trip_customer_requirements_router,
+)
+
 
 app=FastAPI()
 
@@ -14,6 +18,10 @@ app.include_router(customers_router, prefix="/api")
 app.include_router(suppliers_router, prefix="/api")
 app.include_router(trips_router,prefix="/api")
 app.include_router(trip_customers_router,prefix="/api")
+app.include_router(
+    trip_customer_requirements_router,
+    prefix="/api",
+)
 
 
 @app.get("/")
