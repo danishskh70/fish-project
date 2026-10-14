@@ -1,5 +1,6 @@
 /* ============================================================
    Fish Distribution Manager — Frontend
+   Uses ONLY the documented FastAPI endpoints.
    Persists view / filters / open trip across page refreshes.
    ============================================================ */
 
@@ -32,7 +33,7 @@ async function apiFetch(path, options = {}) {
           message = JSON.stringify(body.detail);
         }
       }
-    } catch (_) { /* non-JSON */ }
+    } catch (_) { /* non-JSON error body */ }
     throw new Error(message);
   }
 
@@ -74,9 +75,7 @@ const persist = {
     try {
       const raw = localStorage.getItem(PERSIST_KEY);
       return raw ? JSON.parse(raw) : null;
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   },
   save(patch) {
     try {
@@ -87,7 +86,7 @@ const persist = {
         filters: { ...(current.filters || {}), ...(patch.filters || {}) },
       };
       localStorage.setItem(PERSIST_KEY, JSON.stringify(next));
-    } catch (_) { /* storage might be disabled */ }
+    } catch (_) { /* storage disabled */ }
   },
   clearTrip() {
     try {
@@ -100,7 +99,8 @@ const persist = {
 
 // ===== DOM refs =====
 const healthButton = $('health-button');
-const healthResult = $('health-result');
+const healthBadge  = $('health-badge');
+const healthLabel  = $('health-label');
 
 const views = {
   trips:        $('view-trips'),
@@ -125,13 +125,14 @@ const addFishToTripBtn     = $('add-fish-to-trip-btn');
 const copyCustomersBtn     = $('copy-customers-btn');
 
 // Requirements
-const reqLoading = $('requirements-loading');
-const reqError   = $('requirements-error');
-const reqThead   = $('requirements-thead');
-const reqTbody   = $('requirements-tbody');
-const reqTfoot   = $('requirements-tfoot');
-const reqEmpty   = $('requirements-empty');
-const reqNoFish  = $('requirements-no-fish');
+const reqLoading      = $('requirements-loading');
+const reqError        = $('requirements-error');
+const reqThead        = $('requirements-thead');
+const reqTbody        = $('requirements-tbody');
+const reqTfoot        = $('requirements-tfoot');
+const reqEmpty        = $('requirements-empty');
+const reqNoFish       = $('requirements-no-fish');
+const shortfallWarn   = $('shortfall-warning');
 const emptyAddCustomerBtn = $('empty-add-customer-btn');
 const emptyAddFishBtn     = $('empty-add-fish-btn');
 
@@ -192,35 +193,21 @@ function buildListQuery({ search, sortBy, sortOrder }) {
 
 // ===== Filter persistence helpers =====
 function captureCustomerFilters() {
-  return {
-    search:    customerSearch.value,
-    sortBy:    customerSortBy.value,
-    sortOrder: customerSortOrder.value,
-  };
+  return { search: customerSearch.value, sortBy: customerSortBy.value, sortOrder: customerSortOrder.value };
 }
 function captureFishTypeFilters() {
-  return {
-    search:    fishTypeSearch.value,
-    sortBy:    fishTypeSortBy.value,
-    sortOrder: fishTypeSortOrder.value,
-  };
+  return { search: fishTypeSearch.value, sortBy: fishTypeSortBy.value, sortOrder: fishTypeSortOrder.value };
 }
 function captureSupplierFilters() {
-  return {
-    search:    supplierSearch.value,
-    sortBy:    supplierSortBy.value,
-    sortOrder: supplierSortOrder.value,
-  };
+  return { search: supplierSearch.value, sortBy: supplierSortBy.value, sortOrder: supplierSortOrder.value };
 }
-
 function saveFiltersFor(viewName) {
   const filters = persist.load()?.filters || {};
-  if (viewName === 'customers')    filters.customers  = captureCustomerFilters();
-  if (viewName === 'fish-types')   filters.fishTypes  = captureFishTypeFilters();
-  if (viewName === 'suppliers')    filters.suppliers  = captureSupplierFilters();
+  if (viewName === 'customers')  filters.customers = captureCustomerFilters();
+  if (viewName === 'fish-types') filters.fishTypes = captureFishTypeFilters();
+  if (viewName === 'suppliers')  filters.suppliers = captureSupplierFilters();
   persist.save({ filters });
 }
-
 function restoreFiltersFor(viewName) {
   const filters = persist.load()?.filters || {};
   if (viewName === 'customers' && filters.customers) {
@@ -249,10 +236,7 @@ function switchView(name) {
     link.classList.toggle('active', link.dataset.view === name);
   });
 
-  // Save state for restoration after refresh
   persist.save({ view: name });
-
-  // Restore any saved filters before loading
   restoreFiltersFor(name);
 
   if (name === 'customers')  loadCustomers();
@@ -264,22 +248,38 @@ function switchView(name) {
 navLinks.forEach(link => {
   link.addEventListener('click', (e) => {
     e.preventDefault();
-    // If we're leaving Trips and a trip is open, clear the persisted tripId.
     if (link.dataset.view !== 'trips') persist.clearTrip();
     switchView(link.dataset.view);
   });
 });
 
-// ===== Health check =====
-healthButton.addEventListener('click', async () => {
-  healthResult.textContent = 'Checking…';
+// ===== Health check (badge, not JSON) =====
+function setHealthBadge(stateName, labelText) {
+  healthBadge.classList.remove('ok', 'err', 'checking');
+  if (stateName) healthBadge.classList.add(stateName);
+  healthLabel.textContent = labelText;
+}
+
+async function runHealthCheck() {
+  setHealthBadge('checking', 'Checking…');
   try {
     const data = await apiFetch('/api/health');
-    healthResult.textContent = `OK · ${JSON.stringify(data)}`;
+    // Backend returns {"status":"Ok"} — we don't display the raw JSON,
+    // only a friendly badge.
+    const ok = data && typeof data === 'object' && String(data.status || '').toLowerCase() === 'ok';
+    if (ok) {
+      setHealthBadge('ok', 'Online');
+    } else {
+      setHealthBadge('ok', 'Reachable');
+    }
   } catch (err) {
-    healthResult.textContent = `Error: ${err.message}`;
+    setHealthBadge('err', `Offline`);
+    // Optional: log to console for debugging
+    console.warn('Health check failed:', err.message);
   }
-});
+}
+
+healthButton.addEventListener('click', runHealthCheck);
 
 // ===== Confirm dialog =====
 function confirmDialog({ title, message, confirmText, confirmClass = 'btn-danger' }) {
@@ -386,6 +386,22 @@ backToTripsBtn.addEventListener('click', () => {
 
 // ============================================================
 // REQUIREMENTS TABLE
+// Response schema (confirmed):
+// {
+//   trip_id,
+//   fish_types: [{ id, name }],
+//   customers: [{
+//     trip_customer_id, customer_id, name, phone, address,
+//     quantities: [{ fish_type_id, quantity_bags }],
+//     total_bags
+//   }],
+//   fish_totals: [{
+//     fish_type_id, quantity_bags,
+//     planned_quantity_bags, effective_planned_quantity_bags,
+//     shortfall_bags, shortfall_exists
+//   }],
+//   grand_total_bags
+// }
 // ============================================================
 
 async function loadRequirementsTable(tripId) {
@@ -393,6 +409,7 @@ async function loadRequirementsTable(tripId) {
   reqError.classList.add('hidden');
   reqEmpty.classList.add('hidden');
   reqNoFish.classList.add('hidden');
+  shortfallWarn.classList.add('hidden');
   reqThead.innerHTML = '';
   reqTbody.innerHTML = '';
   reqTfoot.innerHTML = '';
@@ -408,19 +425,34 @@ async function loadRequirementsTable(tripId) {
     if (customers.length === 0) { reqEmpty.classList.remove('hidden'); return; }
     if (fishTypes.length === 0) { reqNoFish.classList.remove('hidden'); return; }
 
+    // Build a fast lookup for fish totals
+    const totalsByFishId = new Map();
+    fishTotals.forEach(ft => totalsByFishId.set(ft.fish_type_id, ft));
+
+    // HEADER — fixed 3 + dynamic fish + total + actions
     let headHtml = `<tr><th>Customer</th><th>Mobile</th><th>Address</th>`;
     fishTypes.forEach(ft => {
-      headHtml += `<th title="${escapeHtml(String(ft.name))}">${escapeHtml(ft.name)}</th>`;
+      headHtml += `
+        <th>
+          <span class="fish-header">
+            <span>${escapeHtml(ft.name)}</span>
+            <button class="planned-edit-btn"
+                    title="Edit planned quantity for ${escapeHtml(ft.name)}"
+                    data-fish-type-id="${ft.id}"
+                    data-fish-type-name="${escapeHtml(ft.name)}">✎</button>
+          </span>
+        </th>`;
     });
     headHtml += `<th>Customer Total</th><th>Actions</th></tr>`;
     reqThead.innerHTML = headHtml;
 
+    // BODY
     let bodyHtml = '';
     customers.forEach(cust => {
-      const customerId     = cust.customer_id ?? cust.id;
-      const tripCustomerId = cust.trip_customer_id ?? '';
-      const name    = cust.name    || cust.customer_name || 'N/A';
-      const phone   = cust.phone   || cust.mobile        || '—';
+      const customerId     = cust.customer_id;
+      const tripCustomerId = cust.trip_customer_id;
+      const name    = cust.name    || 'N/A';
+      const phone   = cust.phone   || '—';
       const address = cust.address || '—';
       const total   = cust.total_bags ?? 0;
 
@@ -454,14 +486,65 @@ async function loadRequirementsTable(tripId) {
     });
     reqTbody.innerHTML = bodyHtml;
 
-    let footHtml = `<tr><td colspan="3" class="totals-label">Fish Totals</td>`;
+    // FOOTER — 3 rows:
+    //  1) "Planned" (only if any planned > 0)
+    //  2) "Fish Totals" (actuals)
+    //  3) "Shortfall" (only if any shortfall_exists)
+    const anyPlanned = fishTotals.some(t => (t.planned_quantity_bags ?? 0) > 0);
+    const anyShortfall = fishTotals.some(t => t.shortfall_exists === true);
+
+    let footHtml = '';
+
+    if (anyPlanned) {
+      footHtml += `<tr class="planned-row"><td colspan="3">Planned</td>`;
+      fishTypes.forEach(ft => {
+        const t = totalsByFishId.get(ft.id);
+        const planned = t ? (t.effective_planned_quantity_bags ?? t.planned_quantity_bags ?? 0) : 0;
+        footHtml += `<td>${planned}</td>`;
+      });
+      // Grand planned = sum of planned (we can compute; the API doesn't expose a total)
+      const grandPlanned = fishTypes.reduce((sum, ft) => {
+        const t = totalsByFishId.get(ft.id);
+        return sum + (t ? (t.effective_planned_quantity_bags ?? t.planned_quantity_bags ?? 0) : 0);
+      }, 0);
+      footHtml += `<td>${grandPlanned}</td><td></td></tr>`;
+    }
+
+    footHtml += `<tr><td colspan="3" class="totals-label">Fish Totals</td>`;
     fishTypes.forEach(ft => {
-      const t = fishTotals.find(x => x.fish_type_id === ft.id);
-      footHtml += `<td>${t ? (t.total_quantity ?? 0) : 0}</td>`;
+      const t = totalsByFishId.get(ft.id);
+      footHtml += `<td>${t ? (t.quantity_bags ?? 0) : 0}</td>`;
     });
     footHtml += `<td>${data.grand_total_bags ?? 0}</td><td></td></tr>`;
+
+    if (anyShortfall) {
+      footHtml += `<tr class="shortfall-row"><td colspan="3">Shortfall</td>`;
+      fishTypes.forEach(ft => {
+        const t = totalsByFishId.get(ft.id);
+        const shortfall = t && t.shortfall_exists ? (t.shortfall_bags ?? 0) : 0;
+        footHtml += `<td>${shortfall > 0 ? shortfall : '—'}</td>`;
+      });
+      const grandShortfall = fishTypes.reduce((sum, ft) => {
+        const t = totalsByFishId.get(ft.id);
+        return sum + (t && t.shortfall_exists ? (t.shortfall_bags ?? 0) : 0);
+      }, 0);
+      footHtml += `<td>${grandShortfall}</td><td></td></tr>`;
+    }
+
     reqTfoot.innerHTML = footHtml;
 
+    // Shortfall warning banner above the table
+    if (anyShortfall) {
+      const totalShortfall = fishTypes.reduce((sum, ft) => {
+        const t = totalsByFishId.get(ft.id);
+        return sum + (t && t.shortfall_exists ? (t.shortfall_bags ?? 0) : 0);
+      }, 0);
+      shortfallWarn.textContent =
+        `⚠ Shortfall detected: ${totalShortfall} bag(s) below planned quantities.`;
+      shortfallWarn.classList.remove('hidden');
+    }
+
+    // Handlers: customer name / edit requirements
     document.querySelectorAll('.customer-link').forEach(el => {
       el.addEventListener('click', () => openRequirementsModal(tripId, el.dataset.customerId));
     });
@@ -469,11 +552,73 @@ async function loadRequirementsTable(tripId) {
       btn.addEventListener('click', () => openRequirementsModal(tripId, btn.dataset.customerId));
     });
 
+    // Handlers: planned-quantity edit (pencil in header)
+    document.querySelectorAll('.planned-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const fishTypeId   = parseInt(btn.dataset.fishTypeId, 10);
+        const fishTypeName = btn.dataset.fishTypeName;
+        const t = totalsByFishId.get(fishTypeId);
+        const currentPlanned = t ? (t.planned_quantity_bags ?? 0) : 0;
+        openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentPlanned);
+      });
+    });
+
   } catch (err) {
     reqLoading.classList.add('hidden');
     reqError.textContent = `Failed to load requirements: ${err.message}`;
     reqError.classList.remove('hidden');
   }
+}
+
+// ============================================================
+// PLANNED QUANTITY EDITOR
+// PATCH /api/trips/{trip_id}/fish-types/{fish_type_id}/planned-quantity
+// Body: { planned_quantity_bags: <int> }
+// ============================================================
+
+function openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentValue) {
+  const html = `
+    <p class="muted" style="margin-bottom:16px;">
+      Set the planned quantity for <strong>${escapeHtml(fishTypeName)}</strong> on this trip.
+    </p>
+    <div class="form-group">
+      <label>Planned quantity (bags)</label>
+      <input type="number" min="0" step="1" id="planned-qty" value="${currentValue}">
+      <div class="help-text">Set to 0 to clear the planned quantity.</div>
+    </div>
+    <div id="planned-qty-error" class="error hidden"></div>
+  `;
+
+  openModal(`Planned quantity — ${fishTypeName}`, html, [
+    { text: 'Cancel', class: 'btn-outline', action: closeModal },
+    {
+      text: 'Save',
+      class: 'btn-primary',
+      action: async () => {
+        const raw     = parseInt(document.getElementById('planned-qty').value, 10);
+        const errorEl = document.getElementById('planned-qty-error');
+        if (isNaN(raw) || raw < 0) {
+          errorEl.textContent = 'Planned quantity must be a non-negative integer.';
+          errorEl.classList.remove('hidden');
+          return;
+        }
+        try {
+          await apiFetch(
+            `/api/trips/${tripId}/fish-types/${fishTypeId}/planned-quantity`,
+            {
+              method: 'PATCH',
+              body: JSON.stringify({ planned_quantity_bags: raw }),
+            }
+          );
+          closeModal();
+          await loadRequirementsTable(tripId);
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.classList.remove('hidden');
+        }
+      },
+    },
+  ]);
 }
 
 // ============================================================
@@ -1403,22 +1548,17 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ============================================================
-// BOOTSTRAP — restore persisted state
+// BOOTSTRAP
 // ============================================================
 
 async function bootstrap() {
   const saved = persist.load();
+  const view  = saved?.view || 'trips';
 
-  // 1) Restore active view
-  const view = saved?.view || 'trips';
-
-  // 2) Restore filters for all list views (so the inputs are pre-filled
-  //    even before switchView loads data)
   restoreFiltersFor('customers');
   restoreFiltersFor('fish-types');
   restoreFiltersFor('suppliers');
 
-  // 3) Activate the view WITHOUT wiping the trip we're about to restore
   Object.entries(views).forEach(([key, el]) => {
     el.classList.toggle('active', key === view);
   });
@@ -1426,12 +1566,13 @@ async function bootstrap() {
     link.classList.toggle('active', link.dataset.view === view);
   });
 
-  // 4) Load the view's data
+  // Always probe the backend on load so the badge reflects reality.
+  runHealthCheck();
+
   if (view === 'customers')  await loadCustomers();
   if (view === 'fish-types') await loadFishTypes();
   if (view === 'suppliers')  await loadSuppliers();
   if (view === 'trips') {
-    // If a trip was open, restore it directly
     if (saved?.tripId) {
       await openTrip(String(saved.tripId));
     } else {
@@ -1440,17 +1581,16 @@ async function bootstrap() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Persist on tab close too (in case the user closes without navigating)
-  window.addEventListener('beforeunload', () => {
-    persist.save({ view: currentViewName() });
-  });
-  bootstrap();
-});
-
 function currentViewName() {
   for (const [name, el] of Object.entries(views)) {
     if (el.classList.contains('active')) return name;
   }
   return 'trips';
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener('beforeunload', () => {
+    persist.save({ view: currentViewName() });
+  });
+  bootstrap();
+});

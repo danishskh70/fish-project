@@ -5,8 +5,12 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.session import Base
+from app.models.customer import Customer  # noqa: F401
+from app.models.fish_type import FishType  # noqa: F401
 from app.models.supplier import Supplier  # noqa: F401
+from app.models.trip import Trip  # noqa: F401
 from app.models.trip_customer import TripCustomer  # noqa: F401
+from app.models.trip_customer_requirement import TripCustomerRequirement  # noqa: F401
 from app.models.trip_fish_type import TripFishType  # noqa: F401
 
 # this is the Alembic Config object, which provides

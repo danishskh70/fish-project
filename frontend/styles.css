@@ -16,6 +16,8 @@
   --success-text: #065f46;
   --danger-bg: #fee2e2;
   --danger-text: #991b1b;
+  --warn-bg: #fef3c7;
+  --warn-text: #92400e;
   --danger: #ef4444;
   --danger-dark: #dc2626;
   --radius: 10px;
@@ -67,12 +69,8 @@ body {
 .sidebar-footer {
   padding: 16px 24px;
   border-top: 1px solid rgba(255,255,255,0.12);
-  display: flex; flex-direction: column; gap: 8px;
-}
-.health-status {
-  font-size: 0.72rem;
-  color: rgba(255,255,255,0.65);
-  word-break: break-word; line-height: 1.4;
+  display: flex; flex-direction: column; gap: 10px;
+  align-items: flex-start;
 }
 
 /* Main */
@@ -123,10 +121,9 @@ body {
 .btn-danger:hover:not(:disabled) { background: var(--danger-dark); }
 .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-/* Row action group inside list items */
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
-/* Toolbar (search + sort) */
+/* Toolbar */
 .toolbar {
   display: flex;
   gap: 10px;
@@ -142,6 +139,7 @@ body {
   font-size: 0.85rem;
   font-family: inherit;
   background: white;
+  min-width: 140px;
 }
 .toolbar .sort-select:focus {
   outline: none; border-color: var(--primary);
@@ -176,12 +174,43 @@ th {
 }
 tbody tr:hover { background: #f9fafb; }
 
+/* Fish column header with pencil button */
+.fish-header {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.fish-header .planned-edit-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.fish-header .planned-edit-btn:hover {
+  background: #eef2f7;
+  color: var(--primary);
+}
+
 tfoot td {
   font-weight: 700;
   background: #eef2f7;
   border-top: 2px solid var(--primary);
   border-bottom: none;
   color: var(--primary);
+}
+tfoot tr.planned-row td {
+  background: #f8fafc;
+  border-top: 1px solid var(--border);
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+tfoot tr.shortfall-row td {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-weight: 600;
 }
 tfoot .totals-label {
   text-transform: uppercase;
@@ -221,13 +250,9 @@ tfoot .totals-label {
   font-size: 0.82rem; color: var(--text-muted);
 }
 
-/* Dim inactive items */
 .list-item-inactive .customer-info h4,
 .list-item-inactive .fish-info h4,
 .list-item-inactive .supplier-info h4 { color: var(--text-muted); }
-.list-item-inactive .customer-info p,
-.list-item-inactive .fish-info p,
-.list-item-inactive .supplier-info p { opacity: .7; }
 
 /* Badges */
 .badge {
@@ -236,13 +261,14 @@ tfoot .totals-label {
 }
 .badge-active { background: var(--success-bg); color: var(--success-text); }
 .badge-inactive { background: var(--danger-bg); color: var(--danger-text); }
+.badge-warn { background: var(--warn-bg); color: var(--warn-text); }
 .trip-status {
   font-size: 0.75rem; padding: 4px 10px; border-radius: 20px;
   background: var(--primary-light); color: var(--primary-text);
   font-weight: 500; text-transform: capitalize;
 }
 
-/* Search */
+/* Search input */
 .search-input {
   width: 100%;
   padding: 10px 14px;

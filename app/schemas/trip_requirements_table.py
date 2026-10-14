@@ -25,6 +25,10 @@ class RequirementsTableCustomer(BaseModel):
 class RequirementsTableFishTotal(BaseModel):
     fish_type_id: int
     quantity_bags: int = Field(ge=0)
+    planned_quantity_bags: int | None = Field(default=None, ge=0)
+    effective_planned_quantity_bags: int = Field(ge=0)
+    shortfall_bags: int = Field(ge=0)
+    shortfall_exists: bool
 
 
 class TripRequirementsTableRead(BaseModel):

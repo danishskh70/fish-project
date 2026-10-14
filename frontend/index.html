@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fish Distribution Manager</title>
   <link rel="stylesheet" href="/static/styles.css">
-  <!-- Fallback so the toolbar is always visible even if styles.css is cached -->
   <style>
+    /* Inline fallback so the toolbar/selects are always visible */
     .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
     .toolbar .search-input { flex: 1 1 240px; margin-bottom: 0; }
     .toolbar .sort-select {
@@ -17,6 +17,21 @@
       background: #fff;
       min-width: 140px;
     }
+    /* Health badge */
+    .health-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.8rem; font-weight: 500;
+      padding: 4px 10px; border-radius: 12px;
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.9);
+    }
+    .health-badge .health-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #9ca3af;
+    }
+    .health-badge.ok .health-dot { background: #22c55e; }
+    .health-badge.err .health-dot { background: #ef4444; }
+    .health-badge.checking .health-dot { background: #f59e0b; }
   </style>
 </head>
 <body>
@@ -35,7 +50,10 @@
       </nav>
       <div class="sidebar-footer">
         <button id="health-button" class="btn btn-secondary btn-sm">Check Backend</button>
-        <span id="health-result" class="health-status">Waiting...</span>
+        <span id="health-badge" class="health-badge">
+          <span class="health-dot"></span>
+          <span id="health-label">Unknown</span>
+        </span>
       </div>
     </aside>
 
@@ -88,6 +106,7 @@
                 <tfoot id="requirements-tfoot"></tfoot>
               </table>
             </div>
+            <div id="shortfall-warning" class="error hidden" style="margin-top:16px;"></div>
           </div>
         </div>
       </section>

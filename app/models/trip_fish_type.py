@@ -1,5 +1,5 @@
 
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -31,4 +31,9 @@ class TripFishType(Base):
         ForeignKey("fish_types.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
+    )
+
+    planned_quantity_bags: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
     )

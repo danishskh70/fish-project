@@ -133,3 +133,32 @@ def add_fish_type_to_trip(
         raise
 
     return association
+
+def update_trip_fish_type_planned_quantity(
+    db: Session,
+    trip_id: int,
+    fish_type_id: int,
+    planned_quantity_bags: int | None,
+) -> TripFishType:
+    association = db.scalar(
+        select(TripFishType).where(
+            TripFishType.trip_id == trip_id,
+            TripFishType.fish_type_id == fish_type_id,
+        )
+    )
+
+    if association is None:
+        raise ValueError(
+            "Fish type is not configured for this trip."
+        )
+
+    association.planned_quantity_bags = planned_quantity_bags
+
+    try:
+        db.commit()
+        db.refresh(association)
+    except Exception:
+        db.rollback()
+        raise
+
+    return association

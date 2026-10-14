@@ -30,8 +30,13 @@ def get_trip_requirements_table(
     if trip is None:
         raise TripRequirementsTableNotFoundError
 
+    
     fish_type_rows = db.execute(
-        select(FishType.id, FishType.name)
+        select(
+            FishType.id,
+            FishType.name,
+            TripFishType.planned_quantity_bags,
+        )
         .join(
             TripFishType,
             TripFishType.fish_type_id == FishType.id,
@@ -40,10 +45,16 @@ def get_trip_requirements_table(
         .order_by(TripFishType.id)
     ).all()
 
+
+    
     fish_types = [
         RequirementsTableFishType(id=row.id, name=row.name)
         for row in fish_type_rows
     ]
+    planned_quantities_by_id = {
+        row.id: row.planned_quantity_bags
+        for row in fish_type_rows
+    }
 
     customer_rows = db.execute(
         select(
@@ -120,13 +131,35 @@ def get_trip_requirements_table(
 
         grand_total_bags += customer_total_bags
 
-    fish_totals = [
-        RequirementsTableFishTotal(
-            fish_type_id=fish_type.id,
-            quantity_bags=fish_totals_by_id[fish_type.id],
+    
+    fish_totals = []
+
+    for fish_type in fish_types:
+        demand_bags = fish_totals_by_id[fish_type.id]
+        planned_quantity_bags = planned_quantities_by_id[fish_type.id]
+
+        effective_planned_quantity_bags = (
+            planned_quantity_bags
+            if planned_quantity_bags is not None
+            else demand_bags
         )
-        for fish_type in fish_types
-    ]
+
+        shortfall_bags = max(
+            0,
+            demand_bags - effective_planned_quantity_bags,
+        )
+
+        fish_totals.append(
+            RequirementsTableFishTotal(
+                fish_type_id=fish_type.id,
+                quantity_bags=demand_bags,
+                planned_quantity_bags=planned_quantity_bags,
+                effective_planned_quantity_bags=effective_planned_quantity_bags,
+                shortfall_bags=shortfall_bags,
+                shortfall_exists=shortfall_bags > 0,
+            )
+        )
+
 
     return TripRequirementsTableRead(
         trip_id=trip.id,

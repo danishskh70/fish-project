@@ -3,13 +3,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.schemas.trip import TripCreate, TripFishTypeAdd, TripRead
+from app.schemas.trip import (
+    TripCreate,
+    TripFishTypeAdd,
+    TripPlannedQuantityUpdate,
+    TripRead,
+)
 from app.schemas.trip_requirements_table import TripRequirementsTableRead
 from app.services.trip import (
     add_fish_type_to_trip,
     create_trip,
     get_trip,
     list_trips,
+    update_trip_fish_type_planned_quantity,
 )
 from app.services.trip_requirements_table import (
     TripRequirementsTableNotFoundError,
@@ -104,4 +110,26 @@ def get_trip_requirements_table_endpoint(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Trip not found.",
+        ) from exc
+        
+@router.patch(
+    "/{trip_id}/fish-types/{fish_type_id}/planned-quantity",
+)
+def update_trip_fish_type_planned_quantity_endpoint(
+    trip_id: int,
+    fish_type_id: int,
+    data: TripPlannedQuantityUpdate,
+    db: Session = Depends(get_db),
+):
+    try:
+        return update_trip_fish_type_planned_quantity(
+            db,
+            trip_id,
+            fish_type_id,
+            data.planned_quantity_bags,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
         ) from exc
