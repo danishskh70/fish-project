@@ -9,6 +9,8 @@ from app.db.session import Base
 from app.models.customer import Customer  # noqa: F401
 from app.models.fish_type import FishType  # noqa: F401
 from app.models.supplier import Supplier  # noqa: F401
+from app.models.supplier_list import SupplierList  # noqa: F401
+from app.models.supplier_list_item import SupplierListItem  # noqa: F401
 from app.models.trip import Trip  # noqa: F401
 from app.models.trip_customer import TripCustomer  # noqa: F401
 from app.models.trip_customer_requirement import TripCustomerRequirement  # noqa: F401

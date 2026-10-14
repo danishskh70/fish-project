@@ -1,7 +1,7 @@
 /* ============================================================
    Fish Distribution Manager — Frontend
    Uses ONLY the documented FastAPI endpoints.
-   Persists view / filters / open trip across page refreshes.
+   Supplier lists are now loaded from the backend — no cache.
    ============================================================ */
 
 // ===== API Client =====
@@ -34,7 +34,9 @@ async function apiFetch(path, options = {}) {
         }
       }
     } catch (_) { /* non-JSON error body */ }
-    throw new Error(message);
+    const err = new Error(message);
+    err.status = response.status;
+    throw err;
   }
 
   if (response.status === 204) return null;
@@ -67,7 +69,7 @@ function debounce(fn, waitMs) {
   };
 }
 
-// ===== Persistent UI state =====
+// ===== Persistent UI state (view / filters / trip only) =====
 const PERSIST_KEY = 'fdm.ui-state.v1';
 
 const persist = {
@@ -96,7 +98,123 @@ const persist = {
     } catch (_) { /* noop */ }
   },
 };
+// ===== Router — hash-based, drives view + open trip =====
+//
+// URL shapes:
+//   #/trips                 → trips list
+//   #/trips/5               → trip #5 workspace
+//   #/customers             → customers list
+//   #/fish-types            → fish types list
+//   #/suppliers             → suppliers list
+//
+// Every navigation pushes a history entry, so the browser Back button
+// walks through in-app history exactly like a normal multi-page site.
 
+const router = {
+  // Parse the current URL hash into a route object.
+  parse() {
+    const hash = (location.hash || '').replace(/^#/, '');
+    // Default to trips list when nothing is set.
+    if (!hash) return { view: 'trips' };
+
+    const parts = hash.split('/').filter(Boolean); // ['trips','5']
+    const view = parts[0] || 'trips';
+    const tripId = parts[1] || null;
+
+    if (['trips', 'customers', 'fish-types', 'suppliers'].indexOf(view) === -1) {
+      return { view: 'trips' };
+    }
+    if (view === 'trips' && tripId) {
+      return { view: 'trips', tripId: String(tripId) };
+    }
+    return { view };
+  },
+
+  // Build the hash string for a route.
+  toHash(route) {
+    if (route.view === 'trips' && route.tripId) {
+      return `#/trips/${route.tripId}`;
+    }
+    return `#/${route.view}`;
+  },
+
+  // Push a new history entry (user-initiated navigation).
+  navigate(route) {
+    const newHash = this.toHash(route);
+    if (location.hash === newHash) {
+      // Already there — just re-dispatch in case state changed.
+      this.dispatch(route);
+      return;
+    }
+    location.hash = newHash;
+    // The hashchange listener will call dispatch.
+  },
+
+  // Replace the current entry (e.g. after closing a trip via button).
+  // We still push here so Back returns to the trip; simpler and predictable.
+  replace(route) {
+    this.navigate(route);
+  },
+
+  // Render the given route.
+  async dispatch(route) {
+    // Toggle visible section
+    Object.entries(views).forEach(([key, el]) => {
+      el.classList.toggle('active', key === route.view);
+    });
+    navLinks.forEach(link => {
+      link.classList.toggle('active', link.dataset.view === route.view);
+    });
+
+    // Persist last view (belt and braces — URL is the real source of truth)
+    persist.save({ view: route.view });
+
+    if (route.view === 'customers') {
+      restoreFiltersFor('customers');
+      await loadCustomers();
+      return;
+    }
+    if (route.view === 'fish-types') {
+      restoreFiltersFor('fish-types');
+      await loadFishTypes();
+      return;
+    }
+    if (route.view === 'suppliers') {
+      restoreFiltersFor('suppliers');
+      await loadSuppliers();
+      return;
+    }
+
+    // Trips view
+    if (route.tripId) {
+      await openTrip(route.tripId, /* fromRouter */ true);
+    } else {
+      // Leaving any open trip
+      state.currentTripId = null;
+      state.supplierLists = [];
+      state.currentSupplierList = null;
+      clearSupplierListUi();
+      tripWorkspace.classList.add('hidden');
+      tripsListContainer.classList.remove('hidden');
+      await loadTrips();
+    }
+  },
+
+  // Bootstrap on page load + listen for history changes.
+  start() {
+    // If the URL has no hash, set a default without adding history
+    if (!location.hash) {
+      history.replaceState(null, '', '#/trips');
+    }
+
+    window.addEventListener('hashchange', () => {
+      this.dispatch(this.parse());
+    });
+
+    // First dispatch
+    this.dispatch(this.parse());
+  },
+};
 // ===== DOM refs =====
 const healthButton = $('health-button');
 const healthBadge  = $('health-badge');
@@ -135,6 +253,19 @@ const reqNoFish       = $('requirements-no-fish');
 const shortfallWarn   = $('shortfall-warning');
 const emptyAddCustomerBtn = $('empty-add-customer-btn');
 const emptyAddFishBtn     = $('empty-add-fish-btn');
+
+// Supplier list
+const generateDraftBtn      = $('generate-draft-btn');
+const finalizeListBtn       = $('finalize-list-btn');
+const supplierListHistory   = $('supplier-list-history');
+const supplierListEmpty     = $('supplier-list-empty');
+const supplierListLoad      = $('supplier-list-loading');
+const supplierListError     = $('supplier-list-error');
+const supplierListContent   = $('supplier-list-content');
+const supplierListStatus    = $('supplier-list-status');
+const supplierListMeta      = $('supplier-list-meta');
+const supplierListTbody     = $('supplier-list-tbody');
+const supplierListTfoot     = $('supplier-list-tfoot');
 
 // Customers
 const customersList      = $('customers-list');
@@ -176,6 +307,8 @@ const modalClose   = $('modal-close');
 // ===== State =====
 const state = {
   currentTripId: null,
+  supplierLists: [],           // all lists for the current trip (from GET)
+  currentSupplierList: null,   // the one being displayed
   customersCache: [],
   fishTypesCache: [],
   suppliersCache: [],
@@ -253,7 +386,7 @@ navLinks.forEach(link => {
   });
 });
 
-// ===== Health check (badge, not JSON) =====
+// ===== Health badge =====
 function setHealthBadge(stateName, labelText) {
   healthBadge.classList.remove('ok', 'err', 'checking');
   if (stateName) healthBadge.classList.add(stateName);
@@ -264,17 +397,10 @@ async function runHealthCheck() {
   setHealthBadge('checking', 'Checking…');
   try {
     const data = await apiFetch('/api/health');
-    // Backend returns {"status":"Ok"} — we don't display the raw JSON,
-    // only a friendly badge.
     const ok = data && typeof data === 'object' && String(data.status || '').toLowerCase() === 'ok';
-    if (ok) {
-      setHealthBadge('ok', 'Online');
-    } else {
-      setHealthBadge('ok', 'Reachable');
-    }
+    setHealthBadge('ok', ok ? 'Online' : 'Reachable');
   } catch (err) {
-    setHealthBadge('err', `Offline`);
-    // Optional: log to console for debugging
+    setHealthBadge('err', 'Offline');
     console.warn('Health check failed:', err.message);
   }
 }
@@ -300,6 +426,7 @@ async function loadTrips() {
   tripsLoading.classList.remove('hidden');
   tripsEmpty.classList.add('hidden');
   tripsList.innerHTML = '';
+  tripWorkspace.classList.add('hidden');
   tripsListContainer.classList.remove('hidden');
 
   try {
@@ -354,6 +481,11 @@ async function openTrip(tripId) {
   tripTitle.textContent = `Trip #${tripId}`;
   tripMeta.textContent = 'Loading…';
 
+  // Reset supplier-list UI before fetching.
+  state.supplierLists = [];
+  state.currentSupplierList = null;
+  clearSupplierListUi();
+
   try {
     const trip = await apiFetch(`/api/trips/${tripId}`);
     let supplierName = trip.supplier_id ? `Supplier #${trip.supplier_id}` : 'No supplier';
@@ -368,7 +500,10 @@ async function openTrip(tripId) {
     tripMeta.textContent =
       `Date: ${trip.trip_date || 'N/A'} · Supplier: ${supplierName} · Status: ${trip.status || '—'}`;
 
-    await loadRequirementsTable(tripId);
+    await Promise.all([
+      loadRequirementsTable(tripId),
+      loadSupplierLists(tripId),
+    ]);
   } catch (err) {
     tripMeta.textContent = `Error: ${err.message}`;
     reqError.textContent = `Failed to load trip: ${err.message}`;
@@ -378,7 +513,10 @@ async function openTrip(tripId) {
 
 backToTripsBtn.addEventListener('click', () => {
   state.currentTripId = null;
+  state.supplierLists = [];
+  state.currentSupplierList = null;
   persist.clearTrip();
+  clearSupplierListUi();
   tripWorkspace.classList.add('hidden');
   tripsListContainer.classList.remove('hidden');
   loadTrips();
@@ -386,22 +524,6 @@ backToTripsBtn.addEventListener('click', () => {
 
 // ============================================================
 // REQUIREMENTS TABLE
-// Response schema (confirmed):
-// {
-//   trip_id,
-//   fish_types: [{ id, name }],
-//   customers: [{
-//     trip_customer_id, customer_id, name, phone, address,
-//     quantities: [{ fish_type_id, quantity_bags }],
-//     total_bags
-//   }],
-//   fish_totals: [{
-//     fish_type_id, quantity_bags,
-//     planned_quantity_bags, effective_planned_quantity_bags,
-//     shortfall_bags, shortfall_exists
-//   }],
-//   grand_total_bags
-// }
 // ============================================================
 
 async function loadRequirementsTable(tripId) {
@@ -425,11 +547,9 @@ async function loadRequirementsTable(tripId) {
     if (customers.length === 0) { reqEmpty.classList.remove('hidden'); return; }
     if (fishTypes.length === 0) { reqNoFish.classList.remove('hidden'); return; }
 
-    // Build a fast lookup for fish totals
     const totalsByFishId = new Map();
     fishTotals.forEach(ft => totalsByFishId.set(ft.fish_type_id, ft));
 
-    // HEADER — fixed 3 + dynamic fish + total + actions
     let headHtml = `<tr><th>Customer</th><th>Mobile</th><th>Address</th>`;
     fishTypes.forEach(ft => {
       headHtml += `
@@ -446,7 +566,6 @@ async function loadRequirementsTable(tripId) {
     headHtml += `<th>Customer Total</th><th>Actions</th></tr>`;
     reqThead.innerHTML = headHtml;
 
-    // BODY
     let bodyHtml = '';
     customers.forEach(cust => {
       const customerId     = cust.customer_id;
@@ -486,11 +605,7 @@ async function loadRequirementsTable(tripId) {
     });
     reqTbody.innerHTML = bodyHtml;
 
-    // FOOTER — 3 rows:
-    //  1) "Planned" (only if any planned > 0)
-    //  2) "Fish Totals" (actuals)
-    //  3) "Shortfall" (only if any shortfall_exists)
-    const anyPlanned = fishTotals.some(t => (t.planned_quantity_bags ?? 0) > 0);
+    const anyPlanned = fishTotals.some(t => (t.effective_planned_quantity_bags ?? 0) > 0);
     const anyShortfall = fishTotals.some(t => t.shortfall_exists === true);
 
     let footHtml = '';
@@ -499,13 +614,11 @@ async function loadRequirementsTable(tripId) {
       footHtml += `<tr class="planned-row"><td colspan="3">Planned</td>`;
       fishTypes.forEach(ft => {
         const t = totalsByFishId.get(ft.id);
-        const planned = t ? (t.effective_planned_quantity_bags ?? t.planned_quantity_bags ?? 0) : 0;
-        footHtml += `<td>${planned}</td>`;
+        footHtml += `<td>${t ? t.effective_planned_quantity_bags : 0}</td>`;
       });
-      // Grand planned = sum of planned (we can compute; the API doesn't expose a total)
       const grandPlanned = fishTypes.reduce((sum, ft) => {
         const t = totalsByFishId.get(ft.id);
-        return sum + (t ? (t.effective_planned_quantity_bags ?? t.planned_quantity_bags ?? 0) : 0);
+        return sum + (t ? t.effective_planned_quantity_bags : 0);
       }, 0);
       footHtml += `<td>${grandPlanned}</td><td></td></tr>`;
     }
@@ -533,7 +646,6 @@ async function loadRequirementsTable(tripId) {
 
     reqTfoot.innerHTML = footHtml;
 
-    // Shortfall warning banner above the table
     if (anyShortfall) {
       const totalShortfall = fishTypes.reduce((sum, ft) => {
         const t = totalsByFishId.get(ft.id);
@@ -544,7 +656,6 @@ async function loadRequirementsTable(tripId) {
       shortfallWarn.classList.remove('hidden');
     }
 
-    // Handlers: customer name / edit requirements
     document.querySelectorAll('.customer-link').forEach(el => {
       el.addEventListener('click', () => openRequirementsModal(tripId, el.dataset.customerId));
     });
@@ -552,14 +663,13 @@ async function loadRequirementsTable(tripId) {
       btn.addEventListener('click', () => openRequirementsModal(tripId, btn.dataset.customerId));
     });
 
-    // Handlers: planned-quantity edit (pencil in header)
     document.querySelectorAll('.planned-edit-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const fishTypeId   = parseInt(btn.dataset.fishTypeId, 10);
         const fishTypeName = btn.dataset.fishTypeName;
         const t = totalsByFishId.get(fishTypeId);
-        const currentPlanned = t ? (t.planned_quantity_bags ?? 0) : 0;
-        openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentPlanned);
+        const currentOverride = t ? t.planned_quantity_bags : 0;
+        openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentOverride);
       });
     });
 
@@ -572,19 +682,18 @@ async function loadRequirementsTable(tripId) {
 
 // ============================================================
 // PLANNED QUANTITY EDITOR
-// PATCH /api/trips/{trip_id}/fish-types/{fish_type_id}/planned-quantity
-// Body: { planned_quantity_bags: <int> }
 // ============================================================
 
-function openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentValue) {
+function openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentOverride) {
   const html = `
     <p class="muted" style="margin-bottom:16px;">
       Set the planned quantity for <strong>${escapeHtml(fishTypeName)}</strong> on this trip.
+      ${currentOverride == null ? '' : `<br>Current override: <strong>${currentOverride}</strong>`}
     </p>
     <div class="form-group">
       <label>Planned quantity (bags)</label>
-      <input type="number" min="0" step="1" id="planned-qty" value="${currentValue}">
-      <div class="help-text">Set to 0 to clear the planned quantity.</div>
+      <input type="number" min="0" step="1" id="planned-qty" value="${currentOverride ?? ''}">
+      <div class="help-text">Leave blank to clear the override. Set to a number to override.</div>
     </div>
     <div id="planned-qty-error" class="error hidden"></div>
   `;
@@ -595,8 +704,10 @@ function openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentValue
       text: 'Save',
       class: 'btn-primary',
       action: async () => {
-        const raw     = parseInt(document.getElementById('planned-qty').value, 10);
-        const errorEl = document.getElementById('planned-qty-error');
+        const rawInput = document.getElementById('planned-qty').value.trim();
+        const errorEl  = document.getElementById('planned-qty-error');
+        const raw = rawInput === '' ? 0 : parseInt(rawInput, 10);
+
         if (isNaN(raw) || raw < 0) {
           errorEl.textContent = 'Planned quantity must be a non-negative integer.';
           errorEl.classList.remove('hidden');
@@ -605,10 +716,7 @@ function openPlannedQuantityModal(tripId, fishTypeId, fishTypeName, currentValue
         try {
           await apiFetch(
             `/api/trips/${tripId}/fish-types/${fishTypeId}/planned-quantity`,
-            {
-              method: 'PATCH',
-              body: JSON.stringify({ planned_quantity_bags: raw }),
-            }
+            { method: 'PATCH', body: JSON.stringify({ planned_quantity_bags: raw }) }
           );
           closeModal();
           await loadRequirementsTable(tripId);
@@ -650,7 +758,7 @@ async function openRequirementsModal(tripId, customerId) {
                    value="${qty}"
                    data-fish-type-id="${ft.id}"
                    data-requirement-id="${reqId}">
-            <div class="help-text">Leave blank or 0 to skip.</div>
+            <div class="help-text">Leave blank or 0 to skip. Existing requirements cannot be deleted.</div>
           </div>
         `;
       });
@@ -712,7 +820,314 @@ async function openRequirementsModal(tripId, customerId) {
 }
 
 // ============================================================
-// ADD CUSTOMER TO TRIP
+// SUPPLIER LISTS — now backed by GET endpoints
+//   GET /api/trips/{trip_id}/supplier-lists            → SupplierListRead[]
+//   GET /api/trips/{trip_id}/supplier-lists/{list_id}  → SupplierListRead
+//   POST .../drafts                                    → SupplierListRead
+//   PATCH .../items/{fish_type_id}                     → SupplierListRead
+//   POST .../finalize                                  → SupplierListRead
+// ============================================================
+
+function clearSupplierListUi() {
+  supplierListEmpty.classList.remove('hidden');
+  supplierListContent.classList.add('hidden');
+  supplierListError.classList.add('hidden');
+  supplierListLoad.classList.add('hidden');
+  finalizeListBtn.classList.add('hidden');
+  supplierListHistory.classList.add('hidden');
+  supplierListHistory.innerHTML = '';
+  supplierListTbody.innerHTML = '';
+  supplierListTfoot.innerHTML = '';
+  supplierListStatus.textContent = '—';
+  supplierListStatus.className = 'badge';
+  supplierListMeta.textContent = '';
+}
+
+function statusBadgeClass(status) {
+  const s = String(status || '').toUpperCase();
+  if (s === 'DRAFT')      return 'badge-draft';
+  if (s === 'FINAL')      return 'badge-final';
+  if (s === 'SUPERSEDED') return 'badge-superseded';
+  return 'badge';
+}
+
+// Pick which list to display when a trip is opened.
+// Preference: FINAL > highest-version DRAFT > newest of any status.
+function pickCurrentSupplierList(lists) {
+  if (!Array.isArray(lists) || lists.length === 0) return null;
+
+  const finalList = lists.find(l => String(l.status).toUpperCase() === 'FINAL');
+  if (finalList) return finalList;
+
+  const drafts = lists
+    .filter(l => String(l.status).toUpperCase() === 'DRAFT')
+    .sort((a, b) => (b.version_number ?? 0) - (a.version_number ?? 0));
+  if (drafts.length > 0) return drafts[0];
+
+  const sorted = [...lists].sort((a, b) => (b.version_number ?? 0) - (a.version_number ?? 0));
+  return sorted[0];
+}
+
+function renderHistoryDropdown(lists, selectedId) {
+  if (!Array.isArray(lists) || lists.length <= 1) {
+    supplierListHistory.classList.add('hidden');
+    supplierListHistory.innerHTML = '';
+    return;
+  }
+  const sorted = [...lists].sort((a, b) => (b.version_number ?? 0) - (a.version_number ?? 0));
+  supplierListHistory.innerHTML = sorted.map(l => {
+    const selected = String(l.id) === String(selectedId) ? ' selected' : '';
+    const status = String(l.status || '').toUpperCase();
+    return `<option value="${l.id}"${selected}>v${l.version_number ?? '?'} · ${escapeHtml(status)}</option>`;
+  }).join('');
+  supplierListHistory.classList.remove('hidden');
+}
+
+async function loadSupplierLists(tripId) {
+  supplierListLoad.classList.remove('hidden');
+  supplierListError.classList.add('hidden');
+  supplierListEmpty.classList.add('hidden');
+  supplierListContent.classList.add('hidden');
+
+  try {
+    const lists = await apiFetch(`/api/trips/${tripId}/supplier-lists`);
+    state.supplierLists = Array.isArray(lists) ? lists : [];
+
+    if (state.supplierLists.length === 0) {
+      state.currentSupplierList = null;
+      supplierListLoad.classList.add('hidden');
+      supplierListEmpty.classList.remove('hidden');
+      supplierListHistory.classList.add('hidden');
+      return;
+    }
+
+    const current = pickCurrentSupplierList(state.supplierLists);
+    state.currentSupplierList = current;
+    supplierListLoad.classList.add('hidden');
+    renderSupplierList(current);
+    renderHistoryDropdown(state.supplierLists, current.id);
+  } catch (err) {
+    supplierListLoad.classList.add('hidden');
+    supplierListEmpty.classList.remove('hidden');
+    supplierListError.textContent = `Failed to load supplier lists: ${err.message}`;
+    supplierListError.classList.remove('hidden');
+  }
+}
+
+function renderSupplierList(list) {
+  if (!list) {
+    clearSupplierListUi();
+    return;
+  }
+
+  supplierListError.classList.add('hidden');
+  supplierListLoad.classList.add('hidden');
+  supplierListEmpty.classList.add('hidden');
+  supplierListContent.classList.remove('hidden');
+
+  const status = String(list.status || 'DRAFT').toUpperCase();
+  const editable = status === 'DRAFT';
+
+  supplierListStatus.textContent = status;
+  supplierListStatus.className = `badge ${statusBadgeClass(status)}`;
+
+  const meta = [];
+  if (list.id != null)             meta.push(`List #${list.id}`);
+  if (list.version_number != null) meta.push(`v${list.version_number}`);
+  if (list.created_at)             meta.push(`Created ${list.created_at}`);
+  if (list.finalized_at)           meta.push(`Finalized ${list.finalized_at}`);
+  supplierListMeta.textContent = meta.join(' · ');
+
+  finalizeListBtn.classList.toggle('hidden', !editable);
+
+  const items = Array.isArray(list.items) ? list.items : [];
+
+  if (items.length === 0) {
+    supplierListTbody.innerHTML =
+      `<tr><td colspan="3" class="muted">No items in this supplier list.</td></tr>`;
+    supplierListTfoot.innerHTML = '';
+    return;
+  }
+
+  supplierListTbody.innerHTML = items.map(item => {
+    const fishTypeId = item.fish_type_id;
+    const name       = item.fish_type_name;
+    const bags       = item.quantity_bags ?? 0;
+    const tubs       = item.tub_count ?? 0;
+
+    return `
+      <tr data-fish-type-id="${fishTypeId}">
+        <td>${escapeHtml(name)}</td>
+        <td>
+          <input type="number" min="0" step="1"
+                 class="supplier-list-input bags-input"
+                 data-fish-type-id="${fishTypeId}"
+                 value="${bags}"
+                 ${editable ? '' : 'disabled'}>
+        </td>
+        <td>
+          <input type="number" min="0" step="1"
+                 class="supplier-list-input tubs-input"
+                 data-fish-type-id="${fishTypeId}"
+                 value="${tubs}"
+                 ${editable ? '' : 'disabled'}>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (list.total_bags != null || list.total_tubs != null) {
+    supplierListTfoot.innerHTML =
+      `<tr><td><strong>Totals</strong></td>` +
+      `<td><strong>${list.total_bags ?? ''}</strong></td>` +
+      `<td><strong>${list.total_tubs ?? ''}</strong></td></tr>`;
+  } else {
+    supplierListTfoot.innerHTML = '';
+  }
+
+  if (editable) {
+    supplierListTbody.querySelectorAll('.bags-input').forEach(input => {
+      input.addEventListener('change', () => {
+        const fishTypeId = parseInt(input.dataset.fishTypeId, 10);
+        const value      = parseInt(input.value, 10);
+        if (isNaN(value) || value < 0) return;
+        saveSupplierListItem(fishTypeId, { quantity_bags: value });
+      });
+    });
+    supplierListTbody.querySelectorAll('.tubs-input').forEach(input => {
+      input.addEventListener('change', () => {
+        const fishTypeId = parseInt(input.dataset.fishTypeId, 10);
+        const value      = parseInt(input.value, 10);
+        if (isNaN(value) || value < 0) return;
+        saveSupplierListItem(fishTypeId, { tub_count: value });
+      });
+    });
+  }
+}
+
+async function saveSupplierListItem(fishTypeId, patch) {
+  const tripId = state.currentTripId;
+  const list   = state.currentSupplierList;
+  if (!tripId || !list || !list.id) return;
+
+  supplierListError.classList.add('hidden');
+  try {
+    const updatedList = await apiFetch(
+      `/api/trips/${tripId}/supplier-lists/${list.id}/items/${fishTypeId}`,
+      { method: 'PATCH', body: JSON.stringify(patch) }
+    );
+
+    // Replace in-memory state: both the array entry and the displayed one.
+    state.currentSupplierList = updatedList;
+    state.supplierLists = state.supplierLists.map(l =>
+      String(l.id) === String(updatedList.id) ? updatedList : l
+    );
+    renderSupplierList(updatedList);
+  } catch (err) {
+    if (err.status === 404) {
+      supplierListError.textContent =
+        'Item or list no longer exists on the server.';
+    } else if (err.status === 409) {
+      supplierListError.textContent =
+        'This list is no longer editable (it may have been finalized elsewhere).';
+    } else {
+      supplierListError.textContent = `Failed to save item: ${err.message}`;
+    }
+    supplierListError.classList.remove('hidden');
+    if (state.currentSupplierList) renderSupplierList(state.currentSupplierList);
+  }
+}
+
+async function generateDraftFlow() {
+  if (!state.currentTripId) return;
+
+  generateDraftBtn.disabled = true;
+  supplierListError.classList.add('hidden');
+  supplierListLoad.classList.remove('hidden');
+  supplierListEmpty.classList.add('hidden');
+  supplierListContent.classList.add('hidden');
+
+  try {
+    await apiFetch(
+      `/api/trips/${state.currentTripId}/supplier-lists/drafts`,
+      { method: 'POST' }
+    );
+    // Re-fetch the full list so version history is accurate.
+    await loadSupplierLists(state.currentTripId);
+  } catch (err) {
+    supplierListLoad.classList.add('hidden');
+    supplierListEmpty.classList.remove('hidden');
+    supplierListError.textContent = `Failed to generate draft: ${err.message}`;
+    supplierListError.classList.remove('hidden');
+  } finally {
+    generateDraftBtn.disabled = false;
+  }
+}
+
+async function finalizeFlow() {
+  const list = state.currentSupplierList;
+  if (!state.currentTripId || !list || !list.id) return;
+
+  const ok = await confirmDialog({
+    title: 'Finalize supplier list',
+    message:
+      'Finalizing makes this list the official supplier list for the trip. ' +
+      'After finalization the items can no longer be edited.',
+    confirmText: 'Finalize',
+    confirmClass: 'btn-primary',
+  });
+  if (!ok) return;
+
+  finalizeListBtn.disabled = true;
+  supplierListError.classList.add('hidden');
+
+  try {
+    await apiFetch(
+      `/api/trips/${state.currentTripId}/supplier-lists/${list.id}/finalize`,
+      { method: 'POST' }
+    );
+    // Re-fetch to pick up SUPERSEDED states.
+    await loadSupplierLists(state.currentTripId);
+  } catch (err) {
+    if (err.status === 409) {
+      supplierListError.textContent =
+        'Cannot finalize: another list is already marked as final for this trip.';
+    } else {
+      supplierListError.textContent = `Failed to finalize: ${err.message}`;
+    }
+    supplierListError.classList.remove('hidden');
+  } finally {
+    finalizeListBtn.disabled = false;
+  }
+}
+
+generateDraftBtn.addEventListener('click', generateDraftFlow);
+finalizeListBtn.addEventListener('click', finalizeFlow);
+
+// History dropdown: switch the displayed list
+supplierListHistory.addEventListener('change', async () => {
+  const id = parseInt(supplierListHistory.value, 10);
+  const chosen = state.supplierLists.find(l => l.id === id);
+  if (!chosen) return;
+
+  // Fetch the fresh copy (in case it changed since the list was loaded).
+  try {
+    const full = await apiFetch(
+      `/api/trips/${state.currentTripId}/supplier-lists/${id}`
+    );
+    state.currentSupplierList = full;
+    state.supplierLists = state.supplierLists.map(l =>
+      String(l.id) === String(full.id) ? full : l
+    );
+    renderSupplierList(full);
+  } catch (err) {
+    supplierListError.textContent = `Failed to load list #${id}: ${err.message}`;
+    supplierListError.classList.remove('hidden');
+  }
+});
+
+// ============================================================
+// ADD CUSTOMER / COPY CUSTOMERS / ADD FISH TYPE
 // ============================================================
 
 addCustomerToTripBtn.addEventListener('click', addCustomerFlow);
@@ -788,10 +1203,6 @@ async function addCustomerFlow() {
   }
 }
 
-// ============================================================
-// COPY CUSTOMERS FROM ANOTHER TRIP
-// ============================================================
-
 copyCustomersBtn.addEventListener('click', async () => {
   if (!state.currentTripId) return;
   try {
@@ -843,10 +1254,6 @@ copyCustomersBtn.addEventListener('click', async () => {
     alert(`Failed to load trips: ${err.message}`);
   }
 });
-
-// ============================================================
-// ADD FISH TYPE TO TRIP
-// ============================================================
 
 addFishToTripBtn.addEventListener('click', addFishTypeFlow);
 emptyAddFishBtn.addEventListener('click', addFishTypeFlow);
@@ -1566,7 +1973,6 @@ async function bootstrap() {
     link.classList.toggle('active', link.dataset.view === view);
   });
 
-  // Always probe the backend on load so the badge reflects reality.
   runHealthCheck();
 
   if (view === 'customers')  await loadCustomers();

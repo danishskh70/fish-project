@@ -18,6 +18,10 @@
   --danger-text: #991b1b;
   --warn-bg: #fef3c7;
   --warn-text: #92400e;
+  --info-bg: #dbeafe;
+  --info-text: #1e40af;
+  --neutral-bg: #e5e7eb;
+  --neutral-text: #4b5563;
   --danger: #ef4444;
   --danger-dark: #dc2626;
   --radius: 10px;
@@ -174,7 +178,7 @@ th {
 }
 tbody tr:hover { background: #f9fafb; }
 
-/* Fish column header with pencil button */
+/* Fish column header pencil */
 .fish-header {
   display: inline-flex; align-items: center; gap: 6px;
 }
@@ -218,6 +222,26 @@ tfoot .totals-label {
   letter-spacing: .04em;
 }
 
+/* Supplier-list table numeric input */
+.supplier-list-input {
+  width: 90px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-family: inherit;
+  background: white;
+}
+.supplier-list-input:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(30,58,95,0.1);
+}
+.supplier-list-input[disabled] {
+  background: #f3f4f6;
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .customer-link {
   color: var(--primary);
   font-weight: 600;
@@ -258,10 +282,14 @@ tfoot .totals-label {
 .badge {
   font-size: 0.72rem; padding: 3px 9px; border-radius: 12px;
   font-weight: 500; text-transform: capitalize;
+  display: inline-block;
 }
 .badge-active { background: var(--success-bg); color: var(--success-text); }
 .badge-inactive { background: var(--danger-bg); color: var(--danger-text); }
 .badge-warn { background: var(--warn-bg); color: var(--warn-text); }
+.badge-draft { background: var(--info-bg); color: var(--info-text); }
+.badge-final { background: var(--success-bg); color: var(--success-text); }
+.badge-superseded { background: var(--neutral-bg); color: var(--neutral-text); }
 .trip-status {
   font-size: 0.75rem; padding: 4px 10px; border-radius: 20px;
   background: var(--primary-light); color: var(--primary-text);
@@ -388,4 +416,8 @@ tfoot .totals-label {
   .trip-actions { width: 100%; }
   .trip-actions .btn { flex: 1; }
   .toolbar { flex-direction: column; align-items: stretch; }
+}
+/* History dropdown inside the supplier-list card */
+#supplier-list-history {
+  min-width: 180px;
 }

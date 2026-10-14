@@ -6,8 +6,13 @@
   <title>Fish Distribution Manager</title>
   <link rel="stylesheet" href="/static/styles.css">
   <style>
-    /* Inline fallback so the toolbar/selects are always visible */
-    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 16px;
+    }
     .toolbar .search-input { flex: 1 1 240px; margin-bottom: 0; }
     .toolbar .sort-select {
       padding: 9px 12px;
@@ -17,7 +22,6 @@
       background: #fff;
       min-width: 140px;
     }
-    /* Health badge */
     .health-badge {
       display: inline-flex; align-items: center; gap: 6px;
       font-size: 0.8rem; font-weight: 500;
@@ -32,10 +36,13 @@
     .health-badge.ok .health-dot { background: #22c55e; }
     .health-badge.err .health-dot { background: #ef4444; }
     .health-badge.checking .health-dot { background: #f59e0b; }
+
+    #supplier-list-history { min-width: 180px; }
   </style>
 </head>
 <body>
   <div class="app">
+    <!-- ========== SIDEBAR ========== -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <h2>🐟 Fish Manager</h2>
@@ -57,18 +64,22 @@
       </div>
     </aside>
 
+    <!-- ========== MAIN ========== -->
     <main class="main-content">
-      <!-- TRIPS -->
+
+      <!-- ---------- TRIPS ---------- -->
       <section id="view-trips" class="view active">
         <div class="view-header">
           <h1>Trips</h1>
           <button id="create-trip-btn" class="btn btn-primary">+ New Trip</button>
         </div>
+
         <div id="trips-list-container" class="card">
           <div id="trips-loading" class="loading">Loading trips…</div>
           <div id="trips-empty" class="empty-state hidden">No trips yet. Create your first trip.</div>
           <ul id="trips-list" class="trip-list"></ul>
         </div>
+
         <div id="trip-workspace" class="hidden">
           <div class="trip-header card">
             <div class="trip-info">
@@ -82,23 +93,29 @@
               <button id="back-to-trips-btn" class="btn btn-outline">← All Trips</button>
             </div>
           </div>
+
+          <!-- Requirements table -->
           <div class="card">
             <h3>Trip requirements</h3>
             <p class="muted" id="requirements-subtitle">Quantities measured in bags</p>
+
             <div id="requirements-loading" class="loading hidden">Loading requirements…</div>
             <div id="requirements-error" class="error hidden"></div>
+
             <div id="requirements-empty" class="empty-state hidden">
               <p>No customers assigned to this trip.</p>
               <button id="empty-add-customer-btn" class="btn btn-primary btn-sm" style="margin-top:12px;">
                 + Add an existing customer
               </button>
             </div>
+
             <div id="requirements-no-fish" class="empty-state hidden">
               <p>This trip has no configured fish types.</p>
               <button id="empty-add-fish-btn" class="btn btn-primary btn-sm" style="margin-top:12px;">
                 + Add a fish type
               </button>
             </div>
+
             <div class="table-wrapper">
               <table id="requirements-table">
                 <thead id="requirements-thead"></thead>
@@ -108,10 +125,60 @@
             </div>
             <div id="shortfall-warning" class="error hidden" style="margin-top:16px;"></div>
           </div>
+
+          <!-- Supplier list -->
+          <div class="card" id="supplier-list-card">
+            <div class="view-header" style="margin-bottom:12px;">
+              <h3 style="margin:0;">Supplier list</h3>
+              <div class="row-actions">
+                <select id="supplier-list-history" class="sort-select hidden"
+                        title="Switch between list versions"></select>
+                <button id="generate-draft-btn" class="btn btn-primary">Generate Draft</button>
+                <button id="finalize-list-btn" class="btn btn-secondary hidden">Finalize List</button>
+              </div>
+            </div>
+
+            <p class="muted" id="supplier-list-subtitle">
+              Generate a draft to plan what to order from the supplier.
+              Editing is disabled once the list is finalized.
+            </p>
+
+            <div id="supplier-list-loading" class="loading hidden">Loading supplier lists…</div>
+            <div id="supplier-list-error" class="error hidden"></div>
+
+            <div id="supplier-list-empty" class="empty-state hidden">
+              No supplier list yet for this trip. Click <strong>Generate Draft</strong> to create one.
+            </div>
+
+            <div id="supplier-list-content" class="hidden">
+              <div style="display:flex; align-items:center; gap:10px; margin:8px 0 12px;">
+                <span id="supplier-list-status" class="badge">—</span>
+                <span class="muted" id="supplier-list-meta"></span>
+              </div>
+
+              <div class="table-wrapper">
+                <table id="supplier-list-table">
+                  <thead>
+                    <tr>
+                      <th>Fish type</th>
+                      <th>Bags</th>
+                      <th>Tubs</th>
+                    </tr>
+                  </thead>
+                  <tbody id="supplier-list-tbody"></tbody>
+                  <tfoot id="supplier-list-tfoot"></tfoot>
+                </table>
+              </div>
+
+              <p class="muted" style="margin-top:12px;">
+                Editing is disabled once a list is finalized or superseded.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- CUSTOMERS -->
+      <!-- ---------- CUSTOMERS ---------- -->
       <section id="view-customers" class="view">
         <div class="view-header">
           <h1>Customers</h1>
@@ -137,7 +204,7 @@
         </div>
       </section>
 
-      <!-- FISH TYPES -->
+      <!-- ---------- FISH TYPES ---------- -->
       <section id="view-fish-types" class="view">
         <div class="view-header">
           <h1>Fish Types</h1>
@@ -163,7 +230,7 @@
         </div>
       </section>
 
-      <!-- SUPPLIERS -->
+      <!-- ---------- SUPPLIERS ---------- -->
       <section id="view-suppliers" class="view">
         <div class="view-header">
           <h1>Suppliers</h1>
@@ -188,9 +255,11 @@
           <ul id="suppliers-list" class="supplier-list"></ul>
         </div>
       </section>
+
     </main>
   </div>
 
+  <!-- MODAL -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
