@@ -3,6 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.schemas.packing_list import (
+    PackingListCreate,
+    PackingListItemAdd,
+    PackingListItemQuantityUpdate,
+    PackingListRead,
+)
 from app.schemas.supplier_list import SupplierListRead
 from app.schemas.supplier_list_item_update import SupplierListItemUpdate
 from app.schemas.trip import (
@@ -12,6 +18,13 @@ from app.schemas.trip import (
     TripRead,
 )
 from app.schemas.trip_requirements_table import TripRequirementsTableRead
+from app.services.packing_list import (
+    add_packing_list_item,
+    create_packing_list,
+    get_packing_list,
+    remove_packing_list_item,
+    update_packing_list_item_quantity,
+)
 from app.services.supplier_list import (
     finalize_supplier_list,
     generate_supplier_list_draft,
@@ -264,4 +277,143 @@ def read_supplier_list(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
+        ) from exc
+
+@router.post(
+    "/{trip_id}/packing-list",
+    response_model=PackingListRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_packing_list_endpoint(
+    trip_id: int,
+    data: PackingListCreate,
+    db: Session = Depends(get_db),
+) -> PackingListRead:
+    try:
+        return create_packing_list(db, trip_id, data)
+    except ValueError as exc:
+        message = str(exc)
+
+        if message == "Trip not found.":
+            status_code = status.HTTP_404_NOT_FOUND
+        elif message == "A packing list already exists for this trip.":
+            status_code = status.HTTP_409_CONFLICT
+        else:
+            status_code = status.HTTP_400_BAD_REQUEST
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=message,
+        ) from exc
+
+@router.patch(
+    "/{trip_id}/packing-list/items/{fish_type_id}",
+    response_model=PackingListRead,
+)
+def update_packing_list_item_quantity_endpoint(
+    trip_id: int,
+    fish_type_id: int,
+    data: PackingListItemQuantityUpdate,
+    db: Session = Depends(get_db),
+) -> PackingListRead:
+    try:
+        return update_packing_list_item_quantity(
+            db=db,
+            trip_id=trip_id,
+            fish_type_id=fish_type_id,
+            quantity_bags=data.quantity_bags,
+        )
+    except ValueError as exc:
+        message = str(exc)
+
+        if message == "Packing list not found for this trip." or message == "Fish type not found in this packing list.":
+            status_code = status.HTTP_404_NOT_FOUND
+        else:
+            status_code = status.HTTP_400_BAD_REQUEST
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=message,
+        ) from exc
+
+@router.post(
+    "/{trip_id}/packing-list/items",
+    response_model=PackingListRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_packing_list_item_endpoint(
+    trip_id: int,
+    data: PackingListItemAdd,
+    db: Session = Depends(get_db),
+) -> PackingListRead:
+    try:
+        return add_packing_list_item(
+            db=db,
+            trip_id=trip_id,
+            data=data,
+        )
+    except ValueError as exc:
+        message = str(exc)
+
+        if message == "Packing list not found for this trip." or "not found" in message.lower():
+            status_code = status.HTTP_404_NOT_FOUND
+        elif "already exists" in message.lower():
+            status_code = status.HTTP_409_CONFLICT
+        elif "inactive" in message.lower():
+            status_code = status.HTTP_400_BAD_REQUEST
+        else:
+            status_code = status.HTTP_400_BAD_REQUEST
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=message,
+        ) from exc
+
+
+@router.get(
+    "/{trip_id}/packing-list",
+    response_model=PackingListRead,
+)
+def get_packing_list_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> PackingListRead:
+    try:
+        return get_packing_list(
+            db=db,
+            trip_id=trip_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.delete(
+    "/{trip_id}/packing-list/items/{fish_type_id}",
+    response_model=PackingListRead,
+)
+def remove_packing_list_item_endpoint(
+    trip_id: int,
+    fish_type_id: int,
+    db: Session = Depends(get_db),
+) -> PackingListRead:
+    try:
+        return remove_packing_list_item(
+            db=db,
+            trip_id=trip_id,
+            fish_type_id=fish_type_id,
+        )
+    except ValueError as exc:
+        message = str(exc)
+
+        if "not found" in message.lower():
+            status_code = status.HTTP_404_NOT_FOUND
+        else:
+            status_code = status.HTTP_409_CONFLICT
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=message,
         ) from exc
