@@ -40,9 +40,13 @@ def record_supplier_delivery(
     trip_id: int,
     data: SupplierDeliveryCreate,
 ) -> SupplierDeliveryRead:
-    trip = db.get(Trip, trip_id)
+    trip = db.scalar(
+        select(Trip).where(Trip.id == trip_id).with_for_update()
+    )
     if trip is None:
         raise LookupError("Trip not found.")
+    if trip.status == "CLOSED":
+        raise RuntimeError("Trip is closed.")
 
     planned_by_fish_type_id: dict[int, SupplierListItem] = {}
 
@@ -127,6 +131,8 @@ def record_supplier_delivery(
                 for item in items
             ],
         )
+        if trip.status == "PLANNING":
+            trip.status = "IN_PROGRESS"
         db.commit()
         return result
     except Exception:

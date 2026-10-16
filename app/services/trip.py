@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -6,7 +7,9 @@ from app.models.fish_type import FishType
 from app.models.supplier import Supplier
 from app.models.trip import Trip
 from app.models.trip_fish_type import TripFishType
-from app.schemas.trip import TripCreate
+from app.schemas.trip import TripCreate, TripRead
+from app.schemas.trip_close import TripCloseRead
+from app.services.handover import get_customer_totals, get_stock
 
 
 def create_trip(db: Session, trip_data: TripCreate) -> Trip:
@@ -162,3 +165,35 @@ def update_trip_fish_type_planned_quantity(
         raise
 
     return association
+
+def close_trip(db: Session, trip_id: int) -> TripCloseRead:
+    try:
+        trip = db.scalar(
+            select(Trip).where(Trip.id == trip_id).with_for_update()
+        )
+        if trip is None:
+            raise LookupError("Trip not found.")
+        if trip.status != "IN_PROGRESS":
+            raise RuntimeError("Only an in-progress trip can be closed.")
+
+        left = [
+            f"{line.fish_type_name}: {line.left_bags}"
+            for line in get_stock(db, trip_id)
+            if line.left_bags > 0
+        ]
+        if left:
+            raise RuntimeError("Stock left. " + ", ".join(left))
+
+        trip.status = "CLOSED"
+        trip.closed_at = datetime.now(UTC)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    db.refresh(trip)
+    return TripCloseRead(
+        trip=TripRead.model_validate(trip),
+        stock=get_stock(db, trip_id),
+        totals=get_customer_totals(db, trip_id),
+    )

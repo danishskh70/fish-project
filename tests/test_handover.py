@@ -510,3 +510,163 @@ def test_failure_after_insert_leaves_nothing(
     assert listed.json() == []
     stock = stock_by_fish(client, setup["trip_id"])
     assert stock == {}
+
+# ---------- trip lifecycle ----------
+
+def get_trip_body(client: TestClient, trip_id: int) -> dict:
+    response = client.get(f"/api/trips/{trip_id}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def close(client: TestClient, trip_id: int):
+    return client.post(f"/api/trips/{trip_id}/close")
+
+
+def test_first_slip_sets_in_progress(client, setup) -> None:
+    assert get_trip_body(client, setup["trip_id"])["status"] == "PLANNING"
+
+    record_slip(
+        client, setup["trip_id"],
+        [{"fish_type_id": setup["rohu"], "delivered_bags": 10}],
+    )
+    assert get_trip_body(client, setup["trip_id"])["status"] == "IN_PROGRESS"
+
+    record_slip(
+        client, setup["trip_id"],
+        [{"fish_type_id": setup["rohu"], "delivered_bags": 5}],
+    )
+    assert get_trip_body(client, setup["trip_id"])["status"] == "IN_PROGRESS"
+
+
+def test_failed_slip_keeps_planning(client, setup) -> None:
+    response = client.post(
+        f"/api/trips/{setup['trip_id']}/supplier-deliveries",
+        json={"items": [{"fish_type_id": 99999, "delivered_bags": 10}]},
+    )
+    assert response.status_code == 404
+    assert get_trip_body(client, setup["trip_id"])["status"] == "PLANNING"
+
+
+def test_leftover_handed_to_self_allows_close(
+    client, setup, test_session_local
+) -> None:
+    record_slip(
+        client, setup["trip_id"],
+        [{"fish_type_id": setup["rohu"], "delivered_bags": 100}],
+    )
+    post_handover(
+        client, setup["trip_id"], setup["ravi_tc"], "ref-a",
+        [{"fish_type_id": setup["rohu"], "bags": 90}],
+    )
+
+    blocked = close(client, setup["trip_id"])
+    assert blocked.status_code == 409
+
+    self_id = create_customer(client, "Self")
+    self_tc = add_trip_customer(test_session_local, setup["trip_id"], self_id)
+    post_handover(
+        client, setup["trip_id"], self_tc, "ref-self",
+        [{"fish_type_id": setup["rohu"], "bags": 10}],
+    )
+
+    response = close(client, setup["trip_id"])
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["trip"]["status"] == "CLOSED"
+    assert body["trip"]["closed_at"] is not None
+    assert {row["fish_type_id"]: row["left_bags"] for row in body["stock"]} == {
+        setup["rohu"]: 0
+    }
+    assert len(body["totals"]) == 2
+
+
+def test_close_blocked_when_stock_left(client, setup) -> None:
+    record_slip(
+        client, setup["trip_id"],
+        [{"fish_type_id": setup["rohu"], "delivered_bags": 10}],
+    )
+    post_handover(
+        client, setup["trip_id"], setup["ravi_tc"], "ref-a",
+        [{"fish_type_id": setup["rohu"], "bags": 6}],
+    )
+
+    response = close(client, setup["trip_id"])
+    assert response.status_code == 409
+    assert "Handover Rohu: 4" in response.json()["detail"]
+
+    trip = get_trip_body(client, setup["trip_id"])
+    assert trip["status"] == "IN_PROGRESS"
+    assert trip["closed_at"] is None
+
+
+def test_close_twice_rejected(client, setup) -> None:
+    record_slip(
+        client, setup["trip_id"],
+        [{"fish_type_id": setup["rohu"], "delivered_bags": 10}],
+    )
+    post_handover(
+        client, setup["trip_id"], setup["ravi_tc"], "ref-a",
+        [{"fish_type_id": setup["rohu"], "bags": 10}],
+    )
+
+    assert close(client, setup["trip_id"]).status_code == 200
+    assert close(client, setup["trip_id"]).status_code == 409
+
+
+def test_close_planning_trip_rejected(client, setup) -> None:
+    response = close(client, setup["trip_id"])
+    assert response.status_code == 409
+    assert get_trip_body(client, setup["trip_id"])["status"] == "PLANNING"
+
+
+def test_close_unknown_trip_404(client) -> None:
+    assert close(client, 99999).status_code == 404
+
+
+def test_close_allowed_with_negative_stock(client, setup) -> None:
+    record_slip(
+        client, setup["trip_id"],
+        [{"fish_type_id": setup["rohu"], "delivered_bags": 10}],
+    )
+    post_handover(
+        client, setup["trip_id"], setup["ravi_tc"], "ref-a",
+        [{"fish_type_id": setup["rohu"], "bags": 12}],
+    )
+
+    response = close(client, setup["trip_id"])
+    assert response.status_code == 200, response.text
+    row = response.json()["stock"][0]
+    assert row["left_bags"] == -2
+    assert row["over_slip"] is True
+
+
+def _closed_trip(client, setup) -> int:
+    record_slip(
+        client, setup["trip_id"],
+        [{"fish_type_id": setup["rohu"], "delivered_bags": 10}],
+    )
+    post_handover(
+        client, setup["trip_id"], setup["ravi_tc"], "ref-a",
+        [{"fish_type_id": setup["rohu"], "bags": 10}],
+    )
+    assert close(client, setup["trip_id"]).status_code == 200
+    return setup["trip_id"]
+
+
+def test_slip_after_close_rejected(client, setup) -> None:
+    trip_id = _closed_trip(client, setup)
+    response = client.post(
+        f"/api/trips/{trip_id}/supplier-deliveries",
+        json={"items": [{"fish_type_id": setup["rohu"], "delivered_bags": 5}]},
+    )
+    assert response.status_code == 409
+
+
+def test_handover_after_close_rejected(client, setup) -> None:
+    trip_id = _closed_trip(client, setup)
+    response = post_handover(
+        client, trip_id, setup["sunil_tc"], "ref-late",
+        [{"fish_type_id": setup["rohu"], "bags": 1}],
+    )
+    assert response.status_code == 409

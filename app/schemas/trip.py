@@ -25,3 +25,4 @@ class TripRead(BaseModel):
     supplier_id: int
     status: str
     created_at: datetime
+    closed_at: datetime | None = None

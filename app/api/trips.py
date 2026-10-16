@@ -24,6 +24,7 @@ from app.schemas.trip import (
     TripPlannedQuantityUpdate,
     TripRead,
 )
+from app.schemas.trip_close import TripCloseRead
 from app.schemas.trip_requirements_table import TripRequirementsTableRead
 from app.services.handover import (
     get_customer_totals,
@@ -59,6 +60,7 @@ from app.services.supplier_list_errors import (
 )
 from app.services.trip import (
     add_fish_type_to_trip,
+    close_trip,
     create_trip,
     get_trip,
     list_trips,
@@ -557,3 +559,15 @@ def get_customer_totals_endpoint(
         return get_customer_totals(db, trip_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+@router.post("/{trip_id}/close", response_model=TripCloseRead)
+def close_trip_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> TripCloseRead:
+    try:
+        return close_trip(db, trip_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

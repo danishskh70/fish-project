@@ -98,7 +98,11 @@ def record_handover(
     data: HandoverCreate,
 ) -> tuple[HandoverRead, bool]:
     """Returns (handover, created). created=False means idempotent replay."""
-    trip = _require_trip(db, trip_id)
+    trip = db.scalar(
+        select(Trip).where(Trip.id == trip_id).with_for_update()
+    )
+    if trip is None:
+        raise LookupError("Trip not found.")
     if trip.status == "CLOSED":
         raise RuntimeError("Trip is closed.")
 
