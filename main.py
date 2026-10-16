@@ -16,12 +16,15 @@ from app.api.trips import router as trips_router
 
 FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 
-app=FastAPI()
-app.mount(
-    "/static",
-    StaticFiles(directory=FRONTEND_DIR),
-    name="static",
-)
+app = FastAPI()
+
+if FRONTEND_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+    @app.get("/", include_in_schema=False)
+    def root():
+        return FileResponse(FRONTEND_DIR / "index.html")
+
 app.include_router(health_router,prefix="/api")
 app.include_router(fish_types_router, prefix="/api")
 app.include_router(customers_router, prefix="/api")
@@ -33,10 +36,3 @@ app.include_router(
     prefix="/api",
 )
 
-
-FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
-
-
-@app.get("/", include_in_schema=False)
-def root():
-    return FileResponse(FRONTEND_DIR / "index.html")
