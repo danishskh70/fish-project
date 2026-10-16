@@ -1,8 +1,14 @@
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.schemas.handover import (
+    CustomerTotalRead,
+    HandoverCreate,
+    HandoverRead,
+    StockLineRead,
+)
 from app.schemas.packing_list import (
     PackingListCreate,
     PackingListItemAdd,
@@ -19,6 +25,13 @@ from app.schemas.trip import (
     TripRead,
 )
 from app.schemas.trip_requirements_table import TripRequirementsTableRead
+from app.services.handover import (
+    get_customer_totals,
+    get_handover,
+    get_stock,
+    list_handovers,
+    record_handover,
+)
 from app.services.packing_list import (
     add_packing_list_item,
     create_packing_list,
@@ -470,5 +483,77 @@ def get_supplier_delivery_endpoint(
 ) -> SupplierDeliveryRead:
     try:
         return get_supplier_delivery(db, trip_id, delivery_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+@router.post(
+    "/{trip_id}/handovers",
+    response_model=HandoverRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_handover_endpoint(
+    trip_id: int,
+    data: HandoverCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> HandoverRead:
+    try:
+        result, created = record_handover(db, trip_id, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+
+@router.get("/{trip_id}/handovers", response_model=list[HandoverRead])
+def list_handovers_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> list[HandoverRead]:
+    try:
+        return list_handovers(db, trip_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{trip_id}/handovers/{handover_id}", response_model=HandoverRead)
+def get_handover_endpoint(
+    trip_id: int,
+    handover_id: int,
+    db: Session = Depends(get_db),
+) -> HandoverRead:
+    try:
+        return get_handover(db, trip_id, handover_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{trip_id}/stock", response_model=list[StockLineRead])
+def get_stock_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> list[StockLineRead]:
+    try:
+        return get_stock(db, trip_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{trip_id}/handover-totals",
+    response_model=list[CustomerTotalRead],
+)
+def get_customer_totals_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> list[CustomerTotalRead]:
+    try:
+        return get_customer_totals(db, trip_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

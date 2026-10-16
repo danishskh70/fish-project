@@ -35,7 +35,6 @@ class SupplierDelivery(Base):
     supplier_list_id: Mapped[int | None] = mapped_column(
         ForeignKey("supplier_lists.id", ondelete="RESTRICT"),
         nullable=True,
-        unique=True,
     )
 
     tub_count: Mapped[int | None] = mapped_column(

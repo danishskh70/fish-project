@@ -61,13 +61,6 @@ def record_supplier_delivery(
                 "Only finalized supplier lists can receive deliveries."
             )
 
-        existing = db.scalar(
-            select(SupplierDelivery).where(
-                SupplierDelivery.supplier_list_id == supplier_list.id
-            )
-        )
-        if existing is not None:
-            raise RuntimeError("Delivery has already been recorded.")
 
         planned_items = db.scalars(
             select(SupplierListItem).where(
