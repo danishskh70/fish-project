@@ -3,7 +3,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.supplier_list import SupplierList
+from app.models.supplier_list_item import SupplierListItem
 from app.models.trip_fish_type import TripFishType
+from app.schemas.supplier_list_item_update import SupplierListItemUpdate
+from app.services.supplier_list import (
+    finalize_supplier_list,
+    generate_supplier_list_draft,
+    update_supplier_list_item,
+)
 
 
 def create_supplier(client: TestClient) -> int:
@@ -371,3 +379,58 @@ def test_adding_item_does_not_change_existing_planned_quantity(
 
     assert planned_after is not None
     assert planned_after.planned_quantity_bags == 20
+
+
+def test_packing_list_changes_do_not_modify_finalized_supplier_list(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    fish_type_id = create_fish_type(client, "Boundary Test Fish")
+    trip_id = create_trip(client, [fish_type_id])
+
+    # Create a supplier-list draft and set its quantity.
+    supplier_list = generate_supplier_list_draft(db_session, trip_id)
+
+    update_supplier_list_item(
+        db_session,
+        trip_id,
+        supplier_list.id,
+        fish_type_id,
+        SupplierListItemUpdate(quantity_bags=7),
+    )
+
+    # Finalize the supplier list before creating the packing list.
+    finalized_list = finalize_supplier_list(
+        db_session,
+        trip_id,
+        supplier_list.id,
+    )
+
+    assert finalized_list.status == "FINAL"
+
+    # Create and then edit the separate packing list.
+    create_packing_list(client, trip_id, fish_type_id, quantity_bags=10)
+
+    response = client.patch(
+        f"/api/trips/{trip_id}/packing-list/items/{fish_type_id}",
+        json={"quantity_bags": 12},
+    )
+    assert response.status_code == 200, response.text
+
+    # Reload the supplier-list records and verify they remain unchanged.
+    db_session.expire_all()
+
+    saved_list = db_session.get(SupplierList, supplier_list.id)
+    assert saved_list is not None
+    assert saved_list.status == "FINAL"
+
+    saved_item = db_session.scalar(
+        select(SupplierListItem).where(
+            SupplierListItem.supplier_list_id == supplier_list.id,
+            SupplierListItem.fish_type_id == fish_type_id,
+        )
+    )
+
+    assert saved_item is not None
+    assert saved_item.quantity_bags == 7
+    assert saved_item.tub_count == 2
