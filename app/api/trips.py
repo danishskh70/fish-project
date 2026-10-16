@@ -9,6 +9,7 @@ from app.schemas.packing_list import (
     PackingListItemQuantityUpdate,
     PackingListRead,
 )
+from app.schemas.supplier_delivery import SupplierDeliveryCreate, SupplierDeliveryRead
 from app.schemas.supplier_list import SupplierListRead
 from app.schemas.supplier_list_item_update import SupplierListItemUpdate
 from app.schemas.trip import (
@@ -24,6 +25,10 @@ from app.services.packing_list import (
     get_packing_list,
     remove_packing_list_item,
     update_packing_list_item_quantity,
+)
+from app.services.supplier_delivery import (
+    get_supplier_delivery,
+    record_supplier_delivery,
 )
 from app.services.supplier_list import (
     finalize_supplier_list,
@@ -417,3 +422,39 @@ def remove_packing_list_item_endpoint(
             status_code=status_code,
             detail=message,
         ) from exc
+
+
+@router.post(
+    "/{trip_id}/supplier-lists/{supplier_list_id}/delivery",
+    response_model=SupplierDeliveryRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_supplier_delivery_endpoint(
+    trip_id: int,
+    supplier_list_id: int,
+    data: SupplierDeliveryCreate,
+    db: Session = Depends(get_db),
+) -> SupplierDeliveryRead:
+    try:
+        return record_supplier_delivery(db, trip_id, supplier_list_id, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{trip_id}/supplier-lists/{supplier_list_id}/delivery",
+    response_model=SupplierDeliveryRead,
+)
+def get_supplier_delivery_endpoint(
+    trip_id: int,
+    supplier_list_id: int,
+    db: Session = Depends(get_db),
+) -> SupplierDeliveryRead:
+    try:
+        return get_supplier_delivery(db, trip_id, supplier_list_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
