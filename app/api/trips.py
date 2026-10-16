@@ -28,6 +28,7 @@ from app.services.packing_list import (
 )
 from app.services.supplier_delivery import (
     get_supplier_delivery,
+    list_supplier_deliveries,
     record_supplier_delivery,
 )
 from app.services.supplier_list import (
@@ -425,18 +426,17 @@ def remove_packing_list_item_endpoint(
 
 
 @router.post(
-    "/{trip_id}/supplier-lists/{supplier_list_id}/delivery",
+    "/{trip_id}/supplier-deliveries",
     response_model=SupplierDeliveryRead,
     status_code=status.HTTP_201_CREATED,
 )
 def record_supplier_delivery_endpoint(
     trip_id: int,
-    supplier_list_id: int,
     data: SupplierDeliveryCreate,
     db: Session = Depends(get_db),
 ) -> SupplierDeliveryRead:
     try:
-        return record_supplier_delivery(db, trip_id, supplier_list_id, data)
+        return record_supplier_delivery(db, trip_id, data)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -446,15 +446,29 @@ def record_supplier_delivery_endpoint(
 
 
 @router.get(
-    "/{trip_id}/supplier-lists/{supplier_list_id}/delivery",
+    "/{trip_id}/supplier-deliveries",
+    response_model=list[SupplierDeliveryRead],
+)
+def list_supplier_deliveries_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> list[SupplierDeliveryRead]:
+    try:
+        return list_supplier_deliveries(db, trip_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{trip_id}/supplier-deliveries/{delivery_id}",
     response_model=SupplierDeliveryRead,
 )
 def get_supplier_delivery_endpoint(
     trip_id: int,
-    supplier_list_id: int,
+    delivery_id: int,
     db: Session = Depends(get_db),
 ) -> SupplierDeliveryRead:
     try:
-        return get_supplier_delivery(db, trip_id, supplier_list_id)
+        return get_supplier_delivery(db, trip_id, delivery_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

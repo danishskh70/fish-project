@@ -17,12 +17,40 @@ from app.db.session import Base
 class SupplierDelivery(Base):
     __tablename__ = "supplier_deliveries"
 
+    __table_args__ = (
+        CheckConstraint(
+            "tub_count >= 0",
+            name="ck_delivery_tubs_nonnegative",
+        ),
+    )
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
-    supplier_list_id: Mapped[int] = mapped_column(
-        ForeignKey("supplier_lists.id", ondelete="RESTRICT"),
+    trip_id: Mapped[int] = mapped_column(
+        ForeignKey("trips.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True,
+    )
+
+    supplier_list_id: Mapped[int | None] = mapped_column(
+        ForeignKey("supplier_lists.id", ondelete="RESTRICT"),
+        nullable=True,
         unique=True,
+    )
+
+    tub_count: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    vehicle: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    driver: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
     )
 
     received_at: Mapped[datetime] = mapped_column(
@@ -66,7 +94,7 @@ class SupplierDeliveryItem(Base):
 
     fish_type_name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    planned_bags: Mapped[int] = mapped_column(Integer, nullable=False)
+    planned_bags: Mapped[int | None] = mapped_column(Integer, nullable=True)
     delivered_bags: Mapped[int] = mapped_column(Integer, nullable=False)
     rejected_bags: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     damaged_bags: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

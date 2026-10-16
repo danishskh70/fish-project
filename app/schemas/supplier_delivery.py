@@ -19,6 +19,10 @@ class SupplierDeliveryItemCreate(BaseModel):
 
 
 class SupplierDeliveryCreate(BaseModel):
+    supplier_list_id: int | None = Field(default=None, gt=0)
+    tub_count: int | None = Field(default=None, ge=0)
+    vehicle: str | None = Field(default=None, max_length=50)
+    driver: str | None = Field(default=None, max_length=100)
     items: list[SupplierDeliveryItemCreate] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -34,7 +38,7 @@ class SupplierDeliveryItemRead(BaseModel):
 
     fish_type_id: int
     fish_type_name: str
-    planned_bags: int
+    planned_bags: int | None
     delivered_bags: int
     rejected_bags: int
     damaged_bags: int
@@ -46,12 +50,16 @@ class SupplierDeliveryItemRead(BaseModel):
 
     @computed_field
     @property
-    def shortage_bags(self) -> int:
+    def shortage_bags(self) -> int | None:
+        if self.planned_bags is None:
+            return None
         return max(self.planned_bags - self.delivered_bags, 0)
 
     @computed_field
     @property
-    def excess_bags(self) -> int:
+    def excess_bags(self) -> int | None:
+        if self.planned_bags is None:
+            return None
         return max(self.delivered_bags - self.planned_bags, 0)
 
 
@@ -59,6 +67,15 @@ class SupplierDeliveryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    supplier_list_id: int
+    trip_id: int
+    supplier_list_id: int | None
+    tub_count: int | None
+    vehicle: str | None
+    driver: str | None
     received_at: datetime
     items: list[SupplierDeliveryItemRead]
+
+    @computed_field
+    @property
+    def total_bags(self) -> int:
+        return sum(item.delivered_bags for item in self.items)
