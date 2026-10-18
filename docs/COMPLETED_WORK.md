@@ -638,6 +638,49 @@ The project changes included:
 **Do not infer that a commit exists from passing tests.** The commit should be confirmed by checking `git log -1 --oneline` and `git status --short` in the local repository. This document records the reported implementation and test state, not a live inspection of the current checkout.
 
 ---
+## 12A. Trip workflow built on the foundation
+
+### 12A.1 Endpoints (all under /api/trips)
+- POST /{trip_id}/supplier-deliveries, GET list, GET one (supplier slips)
+- POST /{trip_id}/handovers, GET list, GET one
+- GET /{trip_id}/stock
+- GET /{trip_id}/handover-totals
+- POST /{trip_id}/close
+
+### 12A.2 Supplier slips
+A slip records bags actually delivered by the supplier, per fish type, with rejected and damaged counts. A slip can be recorded with or without a finalized supplier list. Several slips per list are allowed (migration 80af31dc8519 dropped the unique constraint; the service guard was removed). A closed trip rejects new slips with 409. The first successful slip moves the trip from PLANNING to IN_PROGRESS in the same transaction.
+
+### 12A.3 Handovers
+A handover records bags given to one trip customer, with one or more fish lines. Tables: handovers, handover_lines (migration 25f4df3a2c84).
+- Each submit carries a unique submit_reference. Same reference and same data returns the existing handover with 200. Same reference with different data returns 409.
+- Zero-bag lines are allowed. Negative bags, empty lines, duplicate fish lines, and blank references return 422.
+- Unknown trip, trip customer, or fish type returns 404. Nothing is saved on failure.
+- A closed trip returns 409.
+- A handover above slip quantity, or for a fish not on any slip, is allowed and flagged, not blocked.
+
+### 12A.4 Stock
+left_bags = slip_bags − handed_bags. Rejected and damaged bags are informational and do not change left_bags. over_slip is true when handed_bags exceeds slip_bags. Stock sums all slips for the trip. handover-totals sums bags per trip customer and fish type.
+
+### 12A.5 Trip lifecycle
+PLANNING → IN_PROGRESS → CLOSED.
+- IN_PROGRESS is set by the first successful slip.
+- POST /close requires IN_PROGRESS, otherwise 409. It is rejected with 409 and a message such as "Stock left. Rohu: 10" when any fish type has left_bags above zero. Negative left_bags does not block close.
+- A successful close sets status CLOSED and closed_at (migration 660ceb17f3e0), then returns the trip, final stock, and customer totals.
+- Slip, handover, and close take a row lock on the trip, so a slip or handover cannot slip in while a close runs.
+- Leftover fish is recorded as an ordinary handover to a customer named Self. There is no separate dam or leftover record.
+
+### 12A.6 Tests
+tests/test_handover.py covers handovers, stock, idempotency, rollback, and the lifecycle (first slip status, failed slip, close with and without stock left, double close, closed-trip rejections, negative stock).
+
+### 12A.7 Known gaps and differences from the target documents
+- Close here is the simple stock gate. REQUIREMENTS.md (Phase 14 and 15) wants both quantity and money reconciliation confirmations, version snapshots, locking, and audit. Not built.
+- Status values are PLANNING, IN_PROGRESS, CLOSED, not the DRAFT/PLANNED/DISTRIBUTING/RECONCILING/COMPLETED set in the requirements.
+- Handover has no draft state, no selling rate, and no bill (Phase 9 and 10).
+- No stock movement ledger. Stock is computed from slips and handovers.
+- No authentication yet (Phase 1) and no meeting points (Phase 3).
+- No handover reversal or replacement. No confirm gate for over-slip handovers.
+- A retry of an old handover after the trip closes returns 409 instead of the original record.
+- Trips created before the lifecycle change keep status PLANNING even if they hold slips.
 
 ## 13. What is completed versus not yet implemented
 
@@ -721,4 +764,4 @@ The key architectural achievement is that the route and database algorithm do no
                  manages schema migrations
 ```
 
-**Completed foundation:** the project now has a reusable generic record engine for master data, while trip workflows retain custom APIs. The last reported verification was 73 passing tests, Ruff clean, and one Alembic head. Future phases should build on this foundation one working vertical slice at a time, with explicit business rules and tests before expanding scope.
+Last reported verification: Ruff passed; 163 tests passed; Alembic reported 660ceb17f3e0 (head).
