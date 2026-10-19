@@ -48,3 +48,8 @@ def test_open_routes_stay_open(raw_client, method, path):
 
 def test_allowlist_has_no_stale_entries():
     assert OPEN <= set(all_routes())
+
+def test_openapi_declares_login_schemes():
+    schemes = app.openapi()["components"]["securitySchemes"]
+    assert "HTTPBearer" in schemes
+    assert "APIKeyCookie" in schemes

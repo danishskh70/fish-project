@@ -64,15 +64,14 @@ def login_endpoint(
         username=owner.username,
         token=token if data.token_in_body else None,
     )
-    
+
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout_endpoint(
-    request: Request,
     response: Response,
+    token: str | None = Depends(get_session_token),
     db: Session = Depends(get_db),
 ) -> None:
-    token = get_session_token(request)
     if token:
         logout(db, token)
     response.delete_cookie(
@@ -82,7 +81,6 @@ def logout_endpoint(
         httponly=True,
         samesite=settings.session_cookie_samesite,
     )
-
 
 @router.get("/me", response_model=MeRead)
 def me_endpoint(owner: Owner = Depends(require_owner)) -> MeRead:
