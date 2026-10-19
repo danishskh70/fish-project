@@ -1,8 +1,10 @@
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import router as auth_router
 from app.api.customers import router as customers_router
+from app.api.deps import require_owner
 from app.api.fish_types import router as fish_types_router
 from app.api.health import router as health_router
 from app.api.suppliers import router as suppliers_router
@@ -35,14 +37,18 @@ app.add_middleware(
 @app.get("/")
 def root():
     return "root"
-app.include_router(health_router,prefix="/api")
-app.include_router(fish_types_router, prefix="/api")
-app.include_router(customers_router, prefix="/api")
-app.include_router(suppliers_router, prefix="/api")
-app.include_router(trips_router,prefix="/api")
-app.include_router(trip_customers_router,prefix="/api")
+
+guard = [Depends(require_owner)]
+
+app.include_router(health_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(fish_types_router, prefix="/api", dependencies=guard)
+app.include_router(customers_router, prefix="/api", dependencies=guard)
+app.include_router(suppliers_router, prefix="/api", dependencies=guard)
+app.include_router(trips_router, prefix="/api", dependencies=guard)
+app.include_router(trip_customers_router, prefix="/api", dependencies=guard)
 app.include_router(
     trip_customer_requirements_router,
     prefix="/api",
+    dependencies=guard,
 )
-

@@ -4,12 +4,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_owner
 from app.db.session import Base
 from app.models.customer import Customer  # noqa: F401
 from app.models.fish_type import FishType  # noqa: F401
 from app.models.handover import Handover, HandoverLine  # noqa: F401
-from app.models.owner import Owner  # noqa: F401
+from app.models.owner import Owner
 from app.models.owner_session import OwnerSession  # noqa: F401
 from app.models.packing_list import PackingList  # noqa: F401
 from app.models.packing_list_item import PackingListItem  # noqa: F401
@@ -55,7 +55,9 @@ def db_session(test_session_local):
 
 
 @pytest.fixture
-def client(test_session_local):
+def raw_client(test_session_local):
+    """Real app, real login. No owner override."""
+
     def override_get_db():
         with test_session_local() as db:
             yield db
@@ -67,3 +69,15 @@ def client(test_session_local):
             yield test_client
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture
+def client(raw_client):
+    """Same app, signed in as a fake owner. Used by all feature tests."""
+    app.dependency_overrides[require_owner] = lambda: Owner(
+        id=0, username="test-owner", password_hash="x"
+    )
+    try:
+        yield raw_client
+    finally:
+        app.dependency_overrides.pop(require_owner, None)

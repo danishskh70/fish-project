@@ -10,6 +10,9 @@ from app.services.owner import create_owner, reset_password
 
 PASSWORD = "correct horse battery"
 
+@pytest.fixture
+def client(raw_client):
+    return raw_client
 
 @pytest.fixture(autouse=True)
 def plain_http_cookie(monkeypatch):
