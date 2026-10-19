@@ -1,6 +1,8 @@
+from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.auth import router as auth_router
 from app.api.customers import router as customers_router
@@ -15,28 +17,46 @@ from app.api.trip_customers import router as trip_customers_router
 from app.api.trips import router as trips_router
 from app.core.config import settings
 
-# FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+docs_off = settings.app_env == "production"
 
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
-    allow_origin_regex=settings.cors_origin_regex,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=False,
+app = FastAPI(
+    docs_url=None if docs_off else "/docs",
+    redoc_url=None if docs_off else "/redoc",
+    openapi_url=None if docs_off else "/openapi.json",
 )
 
-# if FRONTEND_DIR.is_dir():
-#     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-#     @app.get("/", include_in_schema=False)
-#     def root():
-#         return FileResponse(FRONTEND_DIR / "index.html")
+
+@app.middleware("http")
+async def reject_foreign_origin(request: Request, call_next):
+    # Browsers always send Origin on cross-site writes. Block unknown ones.
+    # No Origin header (curl, server to server) passes. Reads pass.
+    origin = request.headers.get("origin")
+    if origin and request.method in UNSAFE_METHODS:
+        same_site = urlparse(origin).netloc == request.headers.get("host", "")
+        if origin not in settings.allowed_origins and not same_site:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Origin not allowed."},
+            )
+    return await call_next(request)
+
+
+# Added after the middleware above, so CORS runs first.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["content-type", "authorization"],
+    allow_credentials=True,
+)
+
 
 @app.get("/")
 def root():
     return "root"
+
 
 guard = [Depends(require_owner)]
 

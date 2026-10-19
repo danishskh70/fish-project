@@ -46,6 +46,16 @@ This repo holds the backend only. The React frontend lives in a separate repo.
 ```bash
    uv run alembic upgrade head
 ```
+5b. Create the owner. Run once. You are asked for the password.
+
+```bash
+   uv run python -m app.cli create-owner --username YOUR_NAME
+```
+
+   Lost the password:
+```bash
+   uv run python -m app.cli reset-password --username YOUR_NAME
+```
 
 6. Run the server.
 
@@ -62,7 +72,11 @@ Read from `.env` by `app/core/config.py`.
 
 | Name | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string, for example `postgresql+psycopg://fish_app:PASSWORD@localhost:5432/fish_distribution` |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `APP_ENV` | `development` or `production`. Production hides `/docs`. |
+| `CORS_ORIGINS` | Comma-separated exact origins allowed to call the API |
+| `SESSION_COOKIE_SECURE` | `true` in production. `false` only for plain http on localhost. |
+| `SESSION_COOKIE_SAMESITE` | `lax` (default), `strict`, or `none` |
 
 Never commit `.env`. It is in `.gitignore`.
 
@@ -155,13 +169,30 @@ curl -X POST http://127.0.0.1:8000/api/trips/2/close
 with the same data returns the original handover with 200. Different data
 returns 409.
 
+## Authentication
+
+One owner. No signup. Every `/api` route needs login except `/api/health`
+and `/api/auth/login`.
+
+- `POST /api/auth/login` body `{"username","password"}`. Sets an HttpOnly
+  session cookie. Frontend must send requests with credentials
+  (`fetch(..., { credentials: "include" })`).
+- `POST /api/auth/logout` ends the session.
+- `GET /api/auth/me` returns the signed-in owner, or 401.
+- Token mode, for a frontend on another site where cookies are blocked:
+  send `"token_in_body": true` on login. Keep the token in memory, never
+  in localStorage. Send `Authorization: Bearer <token>`.
+- Wrong password 5 times from one IP locks it for 15 minutes (429).
+- Writes from an origin not in `CORS_ORIGINS` return 403.
+- Sessions end after 8 hours idle or 7 days total.
+
 ## For frontend developers
 
 - Dev base URL: `http://127.0.0.1:8000/api`
-- CORS is not enabled yet. Use a dev-server proxy to `/api`, or ask for CORS to be added.
-- No authentication yet.
+- Add your dev URL to `CORS_ORIGINS`. Wildcards are not supported.
 - Error bodies are `{"detail": "..."}`.
 - Handover and slip writes are transactional. A failed request saves nothing.
+- Never show selling rates in the UI. The API never returns them.
 
 ## Status
 

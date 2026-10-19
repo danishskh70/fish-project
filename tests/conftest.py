@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_db, require_owner
+from app.core.throttle import login_throttle
 from app.db.session import Base
 from app.models.customer import Customer  # noqa: F401
 from app.models.fish_type import FishType  # noqa: F401
@@ -81,3 +82,10 @@ def client(raw_client):
         yield raw_client
     finally:
         app.dependency_overrides.pop(require_owner, None)
+
+
+@pytest.fixture(autouse=True)
+def clear_login_throttle():
+    login_throttle.clear()
+    yield
+    login_throttle.clear()
