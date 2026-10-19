@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.schemas.bill import BillRead
 from app.schemas.handover import (
     CustomerTotalRead,
     HandoverCreate,
@@ -15,6 +16,7 @@ from app.schemas.packing_list import (
     PackingListItemQuantityUpdate,
     PackingListRead,
 )
+from app.schemas.rate import RateSetRead, RatesSet, RateStatusRead
 from app.schemas.supplier_delivery import SupplierDeliveryCreate, SupplierDeliveryRead
 from app.schemas.supplier_list import SupplierListRead
 from app.schemas.supplier_list_item_update import SupplierListItemUpdate
@@ -26,6 +28,7 @@ from app.schemas.trip import (
 )
 from app.schemas.trip_close import TripCloseRead
 from app.schemas.trip_requirements_table import TripRequirementsTableRead
+from app.services.bill import get_bill
 from app.services.handover import (
     get_customer_totals,
     get_handover,
@@ -39,6 +42,11 @@ from app.services.packing_list import (
     get_packing_list,
     remove_packing_list_item,
     update_packing_list_item_quantity,
+)
+from app.services.rate import (
+    get_rate_status,
+    set_customer_rates,
+    set_trip_rates,
 )
 from app.services.supplier_delivery import (
     get_supplier_delivery,
@@ -571,3 +579,50 @@ def close_trip_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+@router.put("/{trip_id}/rates", response_model=list[RateSetRead])
+def set_trip_rates_endpoint(
+    trip_id: int,
+    data: RatesSet,
+    db: Session = Depends(get_db),
+) -> list[RateSetRead]:
+    try:
+        return set_trip_rates(db, trip_id, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put(
+    "/{trip_id}/customers/{trip_customer_id}/rates",
+    response_model=list[RateSetRead],
+)
+def set_customer_rates_endpoint(
+    trip_id: int,
+    trip_customer_id: int,
+    data: RatesSet,
+    db: Session = Depends(get_db),
+) -> list[RateSetRead]:
+    try:
+        return set_customer_rates(db, trip_id, trip_customer_id, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{trip_id}/rate-status", response_model=list[RateStatusRead])
+def get_rate_status_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> list[RateStatusRead]:
+    try:
+        return get_rate_status(db, trip_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        
+@router.get("/{trip_id}/bill", response_model=BillRead)
+def get_bill_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> BillRead:
+    try:
+        return get_bill(db, trip_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

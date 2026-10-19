@@ -124,6 +124,9 @@ Trip workflows use custom routers and services.
 | `/trips/{id}/stock` | Slip bags, handed bags, left bags per fish type |
 | `/trips/{id}/handover-totals` | Bags per customer and fish type |
 | `/trips/{id}/close` | Close the trip |
+| `/trips/{id}/rates`, `/trips/{id}/customers/{trip_customer_id}/rates` | Set selling rates (write-only, never returned) |
+| `/trips/{id}/rate-status` | Which rates are set (flags only) |
+| `/trips/{id}/bill` | Totals per customer |
 
 Full list and schemas at `/docs` and `/openapi.json`.
 
@@ -179,7 +182,6 @@ Not built:
 - handover reversal
 - returns and defects
 - delivery draft and confirmation
-- rates and billing
 - payments
 - reconciliation
 - trip locking and versions

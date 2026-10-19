@@ -765,3 +765,39 @@ The key architectural achievement is that the route and database algorithm do no
 ```
 
 Last reported verification: Ruff passed; 163 tests passed; Alembic reported 660ceb17f3e0 (head).
+
+## 12B. Selling rates and bill
+
+### Rates
+Rates are per bag, `Numeric(10,2)`, zero or more.
+- Trip default: `trip_fish_types.rate_per_bag`, one per fish type per trip.
+- Customer override: table `trip_customer_rates`, one per trip customer and fish type.
+- Rates are write-only. `PUT /api/trips/{id}/rates` and
+  `PUT /api/trips/{id}/customers/{trip_customer_id}/rates` return only
+  `{fish_type_id, rate_set}`. `GET /api/trips/{id}/rate-status` returns
+  flags only. No response in the API returns a rate number.
+- Setting a rate again overwrites it. A fish must be configured on the trip, else 404.
+
+### Pricing a handover
+At submit, each handover line saves a rate: customer override, else trip default,
+else null (unpriced). The handover still saves with a null rate.
+When a rate is set later, it fills unpriced lines only. For a default, customers
+with their own override for that fish are skipped. Priced lines never change.
+
+### Bill
+`GET /api/trips/{id}/bill` returns per trip customer: total_bags, unpriced_bags,
+total_amount, complete, plus trip totals. Amount = sum of bags x saved line rate,
+priced lines only. No per-fish amounts. Amounts are strings with two decimals.
+Works on a closed trip. Close is not blocked by unpriced lines.
+
+### Privacy
+The UI must never show rates. With one fish type, total divided by bags reveals a
+rate, so the bill screen must not sit on a list or home page. Real protection needs
+owner authentication (next slice).
+
+### Tests
+tests/test_rates.py: set and overwrite rates, validation, overrides, rate-status,
+late pricing, saved line rates, no rate fields in responses, bill totals and
+incomplete bills.
+
+Last reported verification: Ruff passed; 197 tests passed; Alembic reported e46929cb17c6 (head).

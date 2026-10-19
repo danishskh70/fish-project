@@ -1,10 +1,12 @@
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
     text,
@@ -56,6 +58,10 @@ class HandoverLine(Base):
             name="uq_handover_lines_handover_fish_type",
         ),
         CheckConstraint("bags >= 0", name="ck_handover_lines_bags_nonnegative"),
+                CheckConstraint(
+            "rate_per_bag >= 0",
+            name="ck_handover_lines_rate_nonnegative",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -73,3 +79,8 @@ class HandoverLine(Base):
     )
 
     bags: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    rate_per_bag: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+    )

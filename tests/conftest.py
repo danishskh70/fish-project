@@ -17,6 +17,7 @@ from app.models.supplier_list import SupplierList  # noqa: F401
 from app.models.supplier_list_item import SupplierListItem  # noqa: F401
 from app.models.trip import Trip  # noqa: F401
 from app.models.trip_customer import TripCustomer  # noqa: F401
+from app.models.trip_customer_rate import TripCustomerRate  # noqa: F401
 from app.models.trip_customer_requirement import TripCustomerRequirement  # noqa: F401
 from app.models.trip_fish_type import TripFishType  # noqa: F401
 from main import app

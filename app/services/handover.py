@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -7,6 +9,8 @@ from app.models.handover import Handover, HandoverLine
 from app.models.supplier_delivery import SupplierDelivery, SupplierDeliveryItem
 from app.models.trip import Trip
 from app.models.trip_customer import TripCustomer
+from app.models.trip_customer_rate import TripCustomerRate
+from app.models.trip_fish_type import TripFishType
 from app.schemas.handover import (
     CustomerTotalRead,
     HandoverCreate,
@@ -91,6 +95,35 @@ def _find_by_reference(db: Session, reference: str) -> Handover | None:
         select(Handover).where(Handover.submit_reference == reference)
     )
 
+def _resolve_rates(
+    db: Session,
+    trip_id: int,
+    trip_customer_id: int,
+    fish_type_ids: set[int],
+) -> dict[int, Decimal | None]:
+    """Rate to save on each line: customer override, else trip default."""
+    default_rows = db.execute(
+        select(TripFishType.fish_type_id, TripFishType.rate_per_bag).where(
+            TripFishType.trip_id == trip_id,
+            TripFishType.fish_type_id.in_(fish_type_ids),
+        )
+    ).all()
+    rates = {row[0]: row[1] for row in default_rows}
+
+    override_rows = db.execute(
+        select(
+            TripCustomerRate.fish_type_id,
+            TripCustomerRate.rate_per_bag,
+        ).where(
+            TripCustomerRate.trip_customer_id == trip_customer_id,
+            TripCustomerRate.fish_type_id.in_(fish_type_ids),
+        )
+    ).all()
+    for fish_type_id, rate in override_rows:
+        rates[fish_type_id] = rate
+
+    return {fish_type_id: rates.get(fish_type_id) for fish_type_id in fish_type_ids}
+
 
 def record_handover(
     db: Session,
@@ -125,6 +158,9 @@ def record_handover(
     if existing is not None:
         return _replay(db, existing, data), False
 
+    rates = _resolve_rates(db, trip_id, trip_customer.id, fish_type_ids)
+
+
     try:
         values = {
             "trip_customer_id": trip_customer.id,
@@ -144,6 +180,7 @@ def record_handover(
                     handover_id=handover.id,
                     fish_type_id=line.fish_type_id,
                     bags=line.bags,
+                    rate_per_bag=rates[line.fish_type_id],
                 )
             )
 

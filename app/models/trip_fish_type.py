@@ -1,5 +1,12 @@
+from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    Numeric,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -13,6 +20,10 @@ class TripFishType(Base):
             "trip_id",
             "fish_type_id",
             name="uq_trip_fish_types_trip_fish",
+        ),
+        CheckConstraint(
+            "rate_per_bag >= 0",
+            name="ck_trip_fish_types_rate_nonnegative",
         ),
     )
 
@@ -35,5 +46,10 @@ class TripFishType(Base):
 
     planned_quantity_bags: Mapped[int | None] = mapped_column(
         Integer,
+        nullable=True,
+    )
+
+    rate_per_bag: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
         nullable=True,
     )
