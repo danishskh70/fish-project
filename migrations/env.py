@@ -13,6 +13,7 @@ from app.models.owner import Owner  # noqa: F401
 from app.models.owner_session import OwnerSession  # noqa: F401
 from app.models.packing_list import PackingList  # noqa: F401
 from app.models.packing_list_item import PackingListItem  # noqa: F401
+from app.models.payment import Payment  # noqa: F401
 from app.models.supplier import Supplier  # noqa: F401
 from app.models.supplier_delivery import SupplierDelivery, SupplierDeliveryItem  # noqa: F401
 from app.models.supplier_list import SupplierList  # noqa: F401

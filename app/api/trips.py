@@ -16,6 +16,7 @@ from app.schemas.packing_list import (
     PackingListItemQuantityUpdate,
     PackingListRead,
 )
+from app.schemas.payment import PaymentCreate, PaymentRead, PaymentSummaryRead
 from app.schemas.rate import RateSetRead, RatesSet, RateStatusRead
 from app.schemas.supplier_delivery import SupplierDeliveryCreate, SupplierDeliveryRead
 from app.schemas.supplier_list import SupplierListRead
@@ -42,6 +43,11 @@ from app.services.packing_list import (
     get_packing_list,
     remove_packing_list_item,
     update_packing_list_item_quantity,
+)
+from app.services.payment import (
+    get_payment_summary,
+    list_payments,
+    record_payment,
 )
 from app.services.rate import (
     get_rate_status,
@@ -624,5 +630,55 @@ def get_bill_endpoint(
 ) -> BillRead:
     try:
         return get_bill(db, trip_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{trip_id}/customers/{trip_customer_id}/payments",
+    response_model=PaymentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_payment_endpoint(
+    trip_id: int,
+    trip_customer_id: int,
+    data: PaymentCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> PaymentRead:
+    try:
+        result, created = record_payment(db, trip_id, trip_customer_id, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+
+@router.get(
+    "/{trip_id}/customers/{trip_customer_id}/payments",
+    response_model=list[PaymentRead],
+)
+def list_payments_endpoint(
+    trip_id: int,
+    trip_customer_id: int,
+    db: Session = Depends(get_db),
+) -> list[PaymentRead]:
+    try:
+        return list_payments(db, trip_id, trip_customer_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{trip_id}/payments-summary", response_model=PaymentSummaryRead)
+def get_payment_summary_endpoint(
+    trip_id: int,
+    db: Session = Depends(get_db),
+) -> PaymentSummaryRead:
+    try:
+        return get_payment_summary(db, trip_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
