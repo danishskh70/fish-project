@@ -827,3 +827,10 @@ Last reported verification: Ruff passed; 197 tests passed; Alembic reported e469
   migration before applying it. `migrations/env.py` must import every model.
 
 Last reported verification: Ruff passed; 302 tests passed; Alembic reported bee732cfae8b (head).
+
+S7 payments done
+326 tests
+head 050e3b5e87ee
+routes: POST/GET /trips/{id}/customers/{tc}/payments, GET /trips/{id}/payments-summary
+rules: append-only, remaining computed, overpay = credit, payment after close allowed
+not built: void, carry-over, gateway  
