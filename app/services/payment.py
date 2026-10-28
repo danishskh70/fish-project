@@ -1,9 +1,11 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.models.handover import Handover, HandoverLine
 from app.models.payment import Payment
 from app.models.trip_customer import TripCustomer
 from app.schemas.payment import (
@@ -11,6 +13,7 @@ from app.schemas.payment import (
     PaymentRead,
     PaymentSummaryCustomerRead,
     PaymentSummaryRead,
+    PaymentVoid,
 )
 from app.services.bill import get_bill
 
@@ -97,9 +100,46 @@ def record_payment(
         raise
 
 
+def void_payment(
+    db: Session,
+    trip_id: int,
+    trip_customer_id: int,
+    payment_id: int,
+    data: PaymentVoid,
+) -> PaymentRead:
+    """Cancel a payment. Row stays. Allowed after trip close. Once only."""
+    _require_trip_customer(db, trip_id, trip_customer_id)
+
+    payment = db.scalar(
+        select(Payment)
+        .where(
+            Payment.id == payment_id,
+            Payment.trip_customer_id == trip_customer_id,
+        )
+        .with_for_update()
+    )
+    if payment is None:
+        raise LookupError("Payment not found for this customer.")
+    if payment.voided_at is not None:
+        raise RuntimeError("Payment already voided.")
+
+    try:
+        payment.voided_at = datetime.now(UTC)
+        payment.void_reason = data.reason
+        db.flush()
+        db.refresh(payment)
+        result = PaymentRead.model_validate(payment)
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise
+
+
 def list_payments(
     db: Session, trip_id: int, trip_customer_id: int
 ) -> list[PaymentRead]:
+    """All rows, voided included."""
     _require_trip_customer(db, trip_id, trip_customer_id)
     rows = db.scalars(
         select(Payment)
@@ -109,30 +149,85 @@ def list_payments(
     return [PaymentRead.model_validate(row) for row in rows]
 
 
+def _previous_balances(
+    db: Session, trip_id: int, customer_ids: set[int]
+) -> dict[int, tuple[Decimal, bool]]:
+    """customer_id -> (old balance, complete). Earlier trips = lower trip id.
+
+    Balance = priced bill minus non-voided payments. Computed, never stored.
+    complete=False when an earlier trip still has unpriced bags.
+    """
+    if not customer_ids:
+        return {}
+
+    billed_rows = db.execute(
+        select(
+            TripCustomer.customer_id,
+            func.sum(HandoverLine.bags * HandoverLine.rate_per_bag),
+            func.sum(
+                case((HandoverLine.rate_per_bag.is_(None), HandoverLine.bags), else_=0)
+            ),
+        )
+        .join(Handover, Handover.trip_customer_id == TripCustomer.id)
+        .join(HandoverLine, HandoverLine.handover_id == Handover.id)
+        .where(
+            TripCustomer.trip_id < trip_id,
+            TripCustomer.customer_id.in_(customer_ids),
+        )
+        .group_by(TripCustomer.customer_id)
+    ).all()
+
+    paid_rows = db.execute(
+        select(TripCustomer.customer_id, func.sum(Payment.amount))
+        .join(Payment, Payment.trip_customer_id == TripCustomer.id)
+        .where(
+            TripCustomer.trip_id < trip_id,
+            TripCustomer.customer_id.in_(customer_ids),
+            Payment.voided_at.is_(None),
+        )
+        .group_by(TripCustomer.customer_id)
+    ).all()
+
+    billed = {
+        customer_id: (Decimal(str(total or 0)), int(unpriced or 0))
+        for customer_id, total, unpriced in billed_rows
+    }
+    paid = {customer_id: Decimal(str(total or 0)) for customer_id, total in paid_rows}
+
+    result: dict[int, tuple[Decimal, bool]] = {}
+    for customer_id in customer_ids:
+        billed_amount, unpriced = billed.get(customer_id, (ZERO, 0))
+        balance = billed_amount - paid.get(customer_id, ZERO)
+        result[customer_id] = (balance.quantize(CENTS), unpriced == 0)
+    return result
+
+
 def get_payment_summary(db: Session, trip_id: int) -> PaymentSummaryRead:
     bill = get_bill(db, trip_id)  # raises LookupError if trip missing
     billed = {c.trip_customer_id: c for c in bill.customers}
 
+    trip_customers = db.execute(
+        select(TripCustomer.id, TripCustomer.customer_id)
+        .where(TripCustomer.trip_id == trip_id)
+        .order_by(TripCustomer.id)
+    ).all()
+
     rows = db.execute(
         select(
-            TripCustomer.id,
-            TripCustomer.customer_id,
+            Payment.trip_customer_id,
             Payment.method,
             Payment.kind,
             func.sum(Payment.amount),
         )
-        .join(Payment, Payment.trip_customer_id == TripCustomer.id)
-        .where(TripCustomer.trip_id == trip_id)
-        .group_by(
-            TripCustomer.id, TripCustomer.customer_id, Payment.method, Payment.kind
-        )
+        .join(TripCustomer, TripCustomer.id == Payment.trip_customer_id)
+        .where(TripCustomer.trip_id == trip_id, Payment.voided_at.is_(None))
+        .group_by(Payment.trip_customer_id, Payment.method, Payment.kind)
     ).all()
 
-    paid: dict[int, dict] = {}
-    for trip_customer_id, customer_id, method, kind, total in rows:
+    paid: dict[int, dict[str, Decimal]] = {}
+    for trip_customer_id, method, kind, total in rows:
         entry = paid.setdefault(
-            trip_customer_id,
-            {"customer_id": customer_id, "cash": ZERO, "online": ZERO, "advance": ZERO},
+            trip_customer_id, {"cash": ZERO, "online": ZERO, "advance": ZERO}
         )
         amount = Decimal(str(total))
         if method == "CASH":
@@ -142,16 +237,18 @@ def get_payment_summary(db: Session, trip_id: int) -> PaymentSummaryRead:
         if kind == "ADVANCE":
             entry["advance"] += amount
 
+    previous = _previous_balances(
+        db, trip_id, {customer_id for _, customer_id in trip_customers}
+    )
+
     customers: list[PaymentSummaryCustomerRead] = []
-    for trip_customer_id in sorted(set(billed) | set(paid)):
+    for trip_customer_id, customer_id in trip_customers:
         bill_row = billed.get(trip_customer_id)
-        entry = paid.get(
-            trip_customer_id,
-            {"customer_id": None, "cash": ZERO, "online": ZERO, "advance": ZERO},
-        )
-        customer_id = bill_row.customer_id if bill_row else entry["customer_id"]
+        entry = paid.get(trip_customer_id, {"cash": ZERO, "online": ZERO, "advance": ZERO})
         billed_amount = bill_row.total_amount if bill_row else ZERO
         total_paid = entry["cash"] + entry["online"]
+        remaining = billed_amount - total_paid
+        previous_balance, previous_complete = previous[customer_id]
         customers.append(
             PaymentSummaryCustomerRead(
                 trip_customer_id=trip_customer_id,
@@ -162,7 +259,10 @@ def get_payment_summary(db: Session, trip_id: int) -> PaymentSummaryRead:
                 cash_paid=entry["cash"].quantize(CENTS),
                 online_paid=entry["online"].quantize(CENTS),
                 total_paid=total_paid.quantize(CENTS),
-                remaining=(billed_amount - total_paid).quantize(CENTS),
+                remaining=remaining.quantize(CENTS),
+                previous_balance=previous_balance,
+                previous_complete=previous_complete,
+                total_due=(previous_balance + remaining).quantize(CENTS),
             )
         )
 

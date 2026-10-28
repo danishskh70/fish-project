@@ -14,6 +14,10 @@ class PaymentCreate(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+class PaymentVoid(BaseModel):
+    reason: str = Field(min_length=1, max_length=500, pattern=r"\S")
+
+
 class PaymentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -25,6 +29,8 @@ class PaymentRead(BaseModel):
     kind: str
     paid_at: datetime
     note: str | None
+    voided_at: datetime | None
+    void_reason: str | None
     created_at: datetime
 
 
@@ -38,6 +44,9 @@ class PaymentSummaryCustomerRead(BaseModel):
     online_paid: Decimal
     total_paid: Decimal
     remaining: Decimal
+    previous_balance: Decimal
+    previous_complete: bool
+    total_due: Decimal
 
 
 class PaymentSummaryRead(BaseModel):

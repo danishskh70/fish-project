@@ -16,7 +16,12 @@ from app.schemas.packing_list import (
     PackingListItemQuantityUpdate,
     PackingListRead,
 )
-from app.schemas.payment import PaymentCreate, PaymentRead, PaymentSummaryRead
+from app.schemas.payment import (
+    PaymentCreate,
+    PaymentRead,
+    PaymentSummaryRead,
+    PaymentVoid,
+)
 from app.schemas.rate import RateSetRead, RatesSet, RateStatusRead
 from app.schemas.supplier_delivery import SupplierDeliveryCreate, SupplierDeliveryRead
 from app.schemas.supplier_list import SupplierListRead
@@ -48,6 +53,7 @@ from app.services.payment import (
     get_payment_summary,
     list_payments,
     record_payment,
+    void_payment,
 )
 from app.services.rate import (
     get_rate_status,
@@ -682,3 +688,22 @@ def get_payment_summary_endpoint(
         return get_payment_summary(db, trip_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/{trip_id}/customers/{trip_customer_id}/payments/{payment_id}/void",
+    response_model=PaymentRead,
+)
+def void_payment_endpoint(
+    trip_id: int,
+    trip_customer_id: int,
+    payment_id: int,
+    data: PaymentVoid,
+    db: Session = Depends(get_db),
+) -> PaymentRead:
+    try:
+        return void_payment(db, trip_id, trip_customer_id, payment_id, data)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
